@@ -149,8 +149,8 @@ void debug_layer_render_hud(Context* ctx, render_mesh_p quad)
 
 	if (!g_font_tried) {
 		g_font_tried = true;
-		if (!r3d_font_init(ctx->r3d, "project_proxy3d/fonts/simhei.ttf", 48) &&
-			!r3d_font_init(ctx->r3d, "project_proxy3d/fonts/arial.ttf", 48)) {
+		if (!r3d_font_init(ctx->r3d, "fonts/simhei.ttf", 48) &&
+			!r3d_font_init(ctx->r3d, "fonts/arial.ttf", 48)) {
 			log_info("debug_layer: font init failed (FPS HUD disabled)");
 		} else {
 			g_font_ok = true;

@@ -345,16 +345,16 @@ static void client_init(game_scene_p self)
 
 	// 音频
 	ctx->audio_dev = audio_open_device();
-	ctx->step_sound = audio_shot_create("project_proxy3d/sounds/grass-step.wav", ctx->audio_dev);
+	ctx->step_sound = audio_shot_create("sounds/grass-step.wav", ctx->audio_dev);
 	audio_shot_set_gain(ctx->step_sound, 1.0f);
-	ctx->bgm = audio_bgm_create("project_proxy3d/sounds/bgm.wav", ctx->audio_dev);
+	ctx->bgm = audio_bgm_create("sounds/bgm.wav", ctx->audio_dev);
 	audio_bgm_set_gain(ctx->bgm, 0.5f);
 	// 战斗音效（缺失文件时返回 NULL，播放时跳过）
-	ctx->sfx_melee  = audio_shot_create("project_proxy3d/sounds/melee.wav", ctx->audio_dev);
-	ctx->sfx_bullet = audio_shot_create("project_proxy3d/sounds/bullet.wav", ctx->audio_dev);
-	ctx->sfx_hit    = audio_shot_create("project_proxy3d/sounds/hit.wav", ctx->audio_dev);
-	ctx->sfx_kill   = audio_shot_create("project_proxy3d/sounds/kill.wav", ctx->audio_dev);
-	ctx->sfx_wave   = audio_shot_create("project_proxy3d/sounds/wave.wav", ctx->audio_dev);
+	ctx->sfx_melee  = audio_shot_create("sounds/melee.wav", ctx->audio_dev);
+	ctx->sfx_bullet = audio_shot_create("sounds/bullet.wav", ctx->audio_dev);
+	ctx->sfx_hit    = audio_shot_create("sounds/hit.wav", ctx->audio_dev);
+	ctx->sfx_kill   = audio_shot_create("sounds/kill.wav", ctx->audio_dev);
+	ctx->sfx_wave   = audio_shot_create("sounds/wave.wav", ctx->audio_dev);
 	audio_shot_set_gain(ctx->sfx_melee, ctx->settings.sfx_volume);
 	audio_shot_set_gain(ctx->sfx_bullet, ctx->settings.sfx_volume);
 	audio_shot_set_gain(ctx->sfx_hit, ctx->settings.sfx_volume);
@@ -594,16 +594,16 @@ static void single_init(game_scene_p self)
 
 	// 音频
 	ctx->audio_dev = audio_open_device();
-	ctx->step_sound = audio_shot_create("project_proxy3d/sounds/grass-step.wav", ctx->audio_dev);
+	ctx->step_sound = audio_shot_create("sounds/grass-step.wav", ctx->audio_dev);
 	audio_shot_set_gain(ctx->step_sound, ctx->settings.sfx_volume);
-	ctx->bgm = audio_bgm_create("project_proxy3d/sounds/bgm.wav", ctx->audio_dev);
+	ctx->bgm = audio_bgm_create("sounds/bgm.wav", ctx->audio_dev);
 	audio_bgm_set_gain(ctx->bgm, ctx->settings.bgm_volume);
 	// 战斗音效（缺失文件时返回 NULL，播放时跳过）
-	ctx->sfx_melee  = audio_shot_create("project_proxy3d/sounds/melee.wav", ctx->audio_dev);
-	ctx->sfx_bullet = audio_shot_create("project_proxy3d/sounds/bullet.wav", ctx->audio_dev);
-	ctx->sfx_hit    = audio_shot_create("project_proxy3d/sounds/hit.wav", ctx->audio_dev);
-	ctx->sfx_kill   = audio_shot_create("project_proxy3d/sounds/kill.wav", ctx->audio_dev);
-	ctx->sfx_wave   = audio_shot_create("project_proxy3d/sounds/wave.wav", ctx->audio_dev);
+	ctx->sfx_melee  = audio_shot_create("sounds/melee.wav", ctx->audio_dev);
+	ctx->sfx_bullet = audio_shot_create("sounds/bullet.wav", ctx->audio_dev);
+	ctx->sfx_hit    = audio_shot_create("sounds/hit.wav", ctx->audio_dev);
+	ctx->sfx_kill   = audio_shot_create("sounds/kill.wav", ctx->audio_dev);
+	ctx->sfx_wave   = audio_shot_create("sounds/wave.wav", ctx->audio_dev);
 	audio_shot_set_gain(ctx->sfx_melee, ctx->settings.sfx_volume);
 	audio_shot_set_gain(ctx->sfx_bullet, ctx->settings.sfx_volume);
 	audio_shot_set_gain(ctx->sfx_hit, ctx->settings.sfx_volume);

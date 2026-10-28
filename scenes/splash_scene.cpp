@@ -10,7 +10,7 @@ SplashScene::SplashScene(Context* ctx) : Scene(ctx, "Splash") {}
 void SplashScene::Load() {
     // 加载 logo 纹理（使用 flip=0，与 SDL_GPU 的 V=0 在顶部一致）
     logo_w = 0; logo_h = 0;
-    SDL_Surface* surf = SDL_LoadPNG("project_proxy3d/textures/logo.png");
+    SDL_Surface* surf = SDL_LoadPNG("textures/logo.png");
     if (surf) {
         SDL_Surface* rgba = SDL_ConvertSurface(surf, SDL_PIXELFORMAT_RGBA32);
         SDL_DestroySurface(surf);

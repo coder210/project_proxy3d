@@ -445,9 +445,9 @@ static void host_init(game_scene_p self)
 
 	// 音频
 	ctx->audio_dev = audio_open_device();
-	ctx->step_sound = audio_shot_create("project_proxy3d/sounds/grass-step.wav", ctx->audio_dev);
+	ctx->step_sound = audio_shot_create("sounds/grass-step.wav", ctx->audio_dev);
 	audio_shot_set_gain(ctx->step_sound, ctx->settings.sfx_volume);
-	ctx->bgm = audio_bgm_create("project_proxy3d/sounds/bgm.wav", ctx->audio_dev);
+	ctx->bgm = audio_bgm_create("sounds/bgm.wav", ctx->audio_dev);
 	audio_bgm_set_gain(ctx->bgm, ctx->settings.bgm_volume);
 }
 

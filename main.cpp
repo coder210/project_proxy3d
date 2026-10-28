@@ -73,7 +73,7 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     ctx->window = create_window("project_proxy3d", 480, 320);
 
     // 设置窗口图标（logo.png 位于 textures 目录下）
-    window_set_icon(ctx->window, "project_proxy3d/textures/logo.png");
+    window_set_icon(ctx->window, "textures/logo.png");
 
     // 应用全屏设置
     if (ctx->settings.fullscreen) {
@@ -81,9 +81,9 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
 
     // r3d 为进程级资源：所有模式统一创建一次（服务端也渲染场景、可返回主菜单）
-    ctx->r3d = r3d_create(ctx->window, "project_proxy3d/shaders");
+    ctx->r3d = r3d_create(ctx->window, "shaders");
     if (!ctx->r3d) {
-        log_error("r3d_create failed (GPU unavailable or shaders missing in project_proxy3d/shaders)");
+        log_error("r3d_create failed (GPU unavailable or shaders missing in shaders)");
         return SDL_APP_FAILURE;
     }
     // 清屏色统一为白色（UI 场景与 game_scene 均为白底蓝图风）
@@ -91,9 +91,9 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     // 设置逻辑分辨率 480x320：所有 2D UI 以逻辑坐标布局，窗口缩放时等比自适应（与 project_proxy2d 一致）
     r3d_set_logical_presentation(ctx->r3d, 480, 320);
     // 初始化字体（用于 UI 文字渲染）
-    bool font_ok = r3d_font_init(ctx->r3d, "project_proxy3d/fonts/simhei.ttf", 24);
+    bool font_ok = r3d_font_init(ctx->r3d, "fonts/simhei.ttf", 24);
     if (!font_ok) {
-        log_error("failed to init font: project_proxy3d/fonts/simhei.ttf");
+        log_error("failed to init font: fonts/simhei.ttf");
     }
     // 创建 UI 用的单位 quad 网格
     ctx->ui_quad = r3d_mesh_quad(ctx->r3d);
