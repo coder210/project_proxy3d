@@ -88,8 +88,8 @@ static inline bool has_dir(int keycode) { return (keycode & INPUT_DIR_MASK) != 0
 
 /* 从 jmsgpack 对象中提取有符号整数 */
 static inline int64_t jmp_int(const jmsgpack_object_t* o) {
-    if (o->type == JMSGPACK_OBJECT_POSITIVE_INTEGER) return (int64_t)o->via.u64;
-    if (o->type == JMSGPACK_OBJECT_NEGATIVE_INTEGER) return o->via.i64;
+    if (jmsgpack_object_type(o) == JMSGPACK_OBJECT_POSITIVE_INTEGER) return (int64_t)jmsgpack_object_u64(o);
+    if (jmsgpack_object_type(o) == JMSGPACK_OBJECT_NEGATIVE_INTEGER) return jmsgpack_object_i64(o);
     return 0;
 }
 
@@ -275,43 +275,43 @@ static inline std::string pack_s2c(int16_t cmd, int32_t frame_id,
 
 /* 解包单个实体 */
 static inline void unpack_entity(const jmsgpack_object_t* o, S2CEntity* e) {
-    if (!o || o->type != JMSGPACK_OBJECT_ARRAY || o->via.array.size < 12) return;
-    e->id         = (int)jmp_int(&o->via.array.ptr[0]);
-    e->type       = (int)jmp_int(&o->via.array.ptr[1]);
-    e->position_x = jmp_int(&o->via.array.ptr[2]);
-    e->position_y = jmp_int(&o->via.array.ptr[3]);
-    e->position_z = jmp_int(&o->via.array.ptr[4]);
-    e->width      = jmp_int(&o->via.array.ptr[5]);
-    e->height     = jmp_int(&o->via.array.ptr[6]);
-    e->hp         = jmp_int(&o->via.array.ptr[7]);
-    e->player_conv = (int)jmp_int(&o->via.array.ptr[8]);
-    e->yaw_quantized = (int16_t)jmp_int(&o->via.array.ptr[9]);
-    e->ai_type    = jmp_int(&o->via.array.ptr[10]);
-    e->char_id    = (int)jmp_int(&o->via.array.ptr[11]);
+    if (!o || jmsgpack_object_type(o) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(o) < 12) return;
+    e->id         = (int)jmp_int(jmsgpack_object_array_at(o, 0));
+    e->type       = (int)jmp_int(jmsgpack_object_array_at(o, 1));
+    e->position_x = jmp_int(jmsgpack_object_array_at(o, 2));
+    e->position_y = jmp_int(jmsgpack_object_array_at(o, 3));
+    e->position_z = jmp_int(jmsgpack_object_array_at(o, 4));
+    e->width      = jmp_int(jmsgpack_object_array_at(o, 5));
+    e->height     = jmp_int(jmsgpack_object_array_at(o, 6));
+    e->hp         = jmp_int(jmsgpack_object_array_at(o, 7));
+    e->player_conv = (int)jmp_int(jmsgpack_object_array_at(o, 8));
+    e->yaw_quantized = (int16_t)jmp_int(jmsgpack_object_array_at(o, 9));
+    e->ai_type    = jmp_int(jmsgpack_object_array_at(o, 10));
+    e->char_id    = (int)jmp_int(jmsgpack_object_array_at(o, 11));
     e->nickname[0] = '\0';
-    if (o->via.array.size >= 13 && o->via.array.ptr[12].type == JMSGPACK_OBJECT_STR) {
-        size_t nl = o->via.array.ptr[12].via.str.size;
+    if (jmsgpack_object_array_size(o) >= 13 && jmsgpack_object_type(jmsgpack_object_array_at(o, 12)) == JMSGPACK_OBJECT_STR) {
+        size_t nl = jmsgpack_object_str_size(jmsgpack_object_array_at(o, 12));
         if (nl > sizeof(e->nickname) - 1) nl = sizeof(e->nickname) - 1;
-        memcpy(e->nickname, o->via.array.ptr[12].via.str.ptr, nl);
+        memcpy(e->nickname, jmsgpack_object_str_ptr(jmsgpack_object_array_at(o, 12)), nl);
         e->nickname[nl] = '\0';
     }
     // AI 运行时状态（旧版快照缺这些字段时保持 0，不影响旧客户端）
     e->ai_timer = 0; e->ai_state = 0; e->ai_target_x = 0; e->ai_target_z = 0;
-    if (o->via.array.size >= 17) {
-        e->ai_timer = (int)jmp_int(&o->via.array.ptr[13]);
-        e->ai_state = (int)jmp_int(&o->via.array.ptr[14]);
-        e->ai_target_x = jmp_int(&o->via.array.ptr[15]);
-        e->ai_target_z = jmp_int(&o->via.array.ptr[16]);
+    if (jmsgpack_object_array_size(o) >= 17) {
+        e->ai_timer = (int)jmp_int(jmsgpack_object_array_at(o, 13));
+        e->ai_state = (int)jmp_int(jmsgpack_object_array_at(o, 14));
+        e->ai_target_x = jmp_int(jmsgpack_object_array_at(o, 15));
+        e->ai_target_z = jmp_int(jmsgpack_object_array_at(o, 16));
     }
     // PathComponent 状态（旧版快照缺这些字段时保持 0）
     e->pf_target_gx = 0; e->pf_target_gz = 0;
     e->pf_path_len = 0; e->pf_next_idx = 0; e->pf_recompute_cd = 0;
-    if (o->via.array.size >= 22) {
-        e->pf_target_gx = (int)jmp_int(&o->via.array.ptr[17]);
-        e->pf_target_gz = (int)jmp_int(&o->via.array.ptr[18]);
-        e->pf_path_len  = (int)jmp_int(&o->via.array.ptr[19]);
-        e->pf_next_idx  = (int)jmp_int(&o->via.array.ptr[20]);
-        e->pf_recompute_cd = (int)jmp_int(&o->via.array.ptr[21]);
+    if (jmsgpack_object_array_size(o) >= 22) {
+        e->pf_target_gx = (int)jmp_int(jmsgpack_object_array_at(o, 17));
+        e->pf_target_gz = (int)jmp_int(jmsgpack_object_array_at(o, 18));
+        e->pf_path_len  = (int)jmp_int(jmsgpack_object_array_at(o, 19));
+        e->pf_next_idx  = (int)jmp_int(jmsgpack_object_array_at(o, 20));
+        e->pf_recompute_cd = (int)jmp_int(jmsgpack_object_array_at(o, 21));
     }
 }
 
@@ -321,13 +321,14 @@ static inline int unpack_world(const char* data, int len, int* eid, S2CEntity* e
     jmsgpack_unpacked_init(&r);
     size_t off = 0;
     if (jmsgpack_unpack_next(&r, data, len, &off) < 0) { jmsgpack_unpacked_destroy(&r); return 0; }
-    if (r.data.type != JMSGPACK_OBJECT_ARRAY || r.data.via.array.size < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
-    *eid = (int)jmp_int(&r.data.via.array.ptr[0]);
-    auto* arr = &r.data.via.array.ptr[1];
-    int n = (int)arr->via.array.size;
+    const jmsgpack_object_t* root = jmsgpack_unpacked_data(&r);
+    if (jmsgpack_object_type(root) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(root) < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
+    *eid = (int)jmp_int(jmsgpack_object_array_at(root, 0));
+    auto* arr = jmsgpack_object_array_at(root, 1);
+    int n = (int)jmsgpack_object_array_size(arr);
     if (n > max_ec) n = max_ec;
     for (int i = 0; i < n; i++)
-        unpack_entity(&arr->via.array.ptr[i], &entities[i]);
+        unpack_entity(jmsgpack_object_array_at(arr, i), &entities[i]);
     jmsgpack_unpacked_destroy(&r);
     return n;
 }
@@ -342,23 +343,24 @@ static inline int unpack_loading(const char* data, int len,
     jmsgpack_unpacked_init(&r);
     size_t off = 0;
     if (jmsgpack_unpack_next(&r, data, len, &off) < 0) { jmsgpack_unpacked_destroy(&r); return -1; }
-    auto* pl = &r.data.via.array.ptr[1];
-    if (pl->type != JMSGPACK_OBJECT_ARRAY || pl->via.array.size < 5) { jmsgpack_unpacked_destroy(&r); return -1; }
-    if (conv)     *conv     = (int)jmp_int(&pl->via.array.ptr[0]);
-    if (frame_id) *frame_id = (int)jmp_int(&pl->via.array.ptr[1]);
-    auto* w = &pl->via.array.ptr[2];
-    if (w->type != JMSGPACK_OBJECT_ARRAY || w->via.array.size < 2) { jmsgpack_unpacked_destroy(&r); return -1; }
-    if (eid) *eid = (int)jmp_int(&w->via.array.ptr[0]);
-    if (seed) *seed = (int)jmp_int(&pl->via.array.ptr[3]);
-    if (map_seed) *map_seed = (int)jmp_int(&pl->via.array.ptr[4]);
-    if (wave) *wave = (pl->via.array.size >= 7) ? (int)jmp_int(&pl->via.array.ptr[5]) : 0;
-    if (wave_delay_ticks) *wave_delay_ticks = (pl->via.array.size >= 7) ? (int)jmp_int(&pl->via.array.ptr[6]) : -1;
-    if (level) *level = (pl->via.array.size >= 8) ? (int)jmp_int(&pl->via.array.ptr[7]) : 1;
-    auto* arr = &w->via.array.ptr[1];
-    int n = (int)arr->via.array.size;
+    const jmsgpack_object_t* root = jmsgpack_unpacked_data(&r);
+    auto* pl = jmsgpack_object_array_at(root, 1);
+    if (jmsgpack_object_type(pl) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(pl) < 5) { jmsgpack_unpacked_destroy(&r); return -1; }
+    if (conv)     *conv     = (int)jmp_int(jmsgpack_object_array_at(pl, 0));
+    if (frame_id) *frame_id = (int)jmp_int(jmsgpack_object_array_at(pl, 1));
+    auto* w = jmsgpack_object_array_at(pl, 2);
+    if (jmsgpack_object_type(w) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(w) < 2) { jmsgpack_unpacked_destroy(&r); return -1; }
+    if (eid) *eid = (int)jmp_int(jmsgpack_object_array_at(w, 0));
+    if (seed) *seed = (int)jmp_int(jmsgpack_object_array_at(pl, 3));
+    if (map_seed) *map_seed = (int)jmp_int(jmsgpack_object_array_at(pl, 4));
+    if (wave) *wave = (jmsgpack_object_array_size(pl) >= 7) ? (int)jmp_int(jmsgpack_object_array_at(pl, 5)) : 0;
+    if (wave_delay_ticks) *wave_delay_ticks = (jmsgpack_object_array_size(pl) >= 7) ? (int)jmp_int(jmsgpack_object_array_at(pl, 6)) : -1;
+    if (level) *level = (jmsgpack_object_array_size(pl) >= 8) ? (int)jmp_int(jmsgpack_object_array_at(pl, 7)) : 1;
+    auto* arr = jmsgpack_object_array_at(w, 1);
+    int n = (int)jmsgpack_object_array_size(arr);
     if (n > max_ec) n = max_ec;
     for (int i = 0; i < n; i++)
-        unpack_entity(&arr->via.array.ptr[i], &entities[i]);
+        unpack_entity(jmsgpack_object_array_at(arr, i), &entities[i]);
     jmsgpack_unpacked_destroy(&r);
     return n;
 }
@@ -370,11 +372,12 @@ static inline int unpack_map_reload(const char* data, int len, int* frame_id, in
     jmsgpack_unpacked_init(&r);
     size_t off = 0;
     if (jmsgpack_unpack_next(&r, data, len, &off) < 0) { jmsgpack_unpacked_destroy(&r); return 0; }
-    if (r.data.type != JMSGPACK_OBJECT_ARRAY || r.data.via.array.size < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
-    auto* pl = &r.data.via.array.ptr[1];
-    if (pl->type != JMSGPACK_OBJECT_ARRAY || pl->via.array.size < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
-    if (frame_id) *frame_id = (int)jmp_int(&pl->via.array.ptr[0]);
-    if (level) *level = (int)jmp_int(&pl->via.array.ptr[1]);
+    const jmsgpack_object_t* root = jmsgpack_unpacked_data(&r);
+    if (jmsgpack_object_type(root) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(root) < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
+    auto* pl = jmsgpack_object_array_at(root, 1);
+    if (jmsgpack_object_type(pl) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(pl) < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
+    if (frame_id) *frame_id = (int)jmp_int(jmsgpack_object_array_at(pl, 0));
+    if (level) *level = (int)jmp_int(jmsgpack_object_array_at(pl, 1));
     jmsgpack_unpacked_destroy(&r);
     return 1;
 }
@@ -400,49 +403,50 @@ static inline int unpack_command(const char* data, int len,
     jmsgpack_unpacked_init(&r);
     size_t off = 0;
     if (jmsgpack_unpack_next(&r, data, len, &off) < 0) { jmsgpack_unpacked_destroy(&r); return 0; }
-    if (r.data.type != JMSGPACK_OBJECT_ARRAY || r.data.via.array.size < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
-    auto* pl = &r.data.via.array.ptr[1];
-    if (pl->type != JMSGPACK_OBJECT_ARRAY || pl->via.array.size < 5) { jmsgpack_unpacked_destroy(&r); return 0; }
+    const jmsgpack_object_t* root = jmsgpack_unpacked_data(&r);
+    if (jmsgpack_object_type(root) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(root) < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
+    auto* pl = jmsgpack_object_array_at(root, 1);
+    if (jmsgpack_object_type(pl) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(pl) < 5) { jmsgpack_unpacked_destroy(&r); return 0; }
 
-    if (frame_id) *frame_id = (int)jmp_int(&pl->via.array.ptr[0]);
+    if (frame_id) *frame_id = (int)jmp_int(jmsgpack_object_array_at(pl, 0));
 
     auto read_arr = [&](int idx, auto* out, int max, int& cnt) {
-        if (idx >= (int)pl->via.array.size) return;
-        auto* a = &pl->via.array.ptr[idx];
-        if (a->type != JMSGPACK_OBJECT_ARRAY) return;
-        int n = (int)a->via.array.size;
+        if (idx >= (int)jmsgpack_object_array_size(pl)) return;
+        auto* a = jmsgpack_object_array_at(pl, idx);
+        if (jmsgpack_object_type(a) != JMSGPACK_OBJECT_ARRAY) return;
+        int n = (int)jmsgpack_object_array_size(a);
         if (n > max) n = max;
         cnt = n;
         for (int i = 0; i < n; i++) {
-            auto* o = &a->via.array.ptr[i];
+            auto* o = jmsgpack_object_array_at(a, i);
             auto& d = out[i];
             using T = std::decay_t<decltype(d)>;
             if constexpr (std::is_same_v<T, S2CPlayerJoin>) {
-                if (o->type == JMSGPACK_OBJECT_ARRAY && o->via.array.size >= 5) {
-                    d.conv = (int)jmp_int(&o->via.array.ptr[0]);
-                    d.position_x = jmp_int(&o->via.array.ptr[1]);
-                    d.position_y = jmp_int(&o->via.array.ptr[2]);
-                    d.position_z = jmp_int(&o->via.array.ptr[3]);
-                    d.char_id = (int)jmp_int(&o->via.array.ptr[4]);
+                if (jmsgpack_object_type(o) == JMSGPACK_OBJECT_ARRAY && jmsgpack_object_array_size(o) >= 5) {
+                    d.conv = (int)jmp_int(jmsgpack_object_array_at(o, 0));
+                    d.position_x = jmp_int(jmsgpack_object_array_at(o, 1));
+                    d.position_y = jmp_int(jmsgpack_object_array_at(o, 2));
+                    d.position_z = jmp_int(jmsgpack_object_array_at(o, 3));
+                    d.char_id = (int)jmp_int(jmsgpack_object_array_at(o, 4));
                     d.nickname[0] = '\0';
-                    if (o->via.array.size >= 6 && o->via.array.ptr[5].type == JMSGPACK_OBJECT_STR) {
-                        size_t nl = o->via.array.ptr[5].via.str.size;
+                    if (jmsgpack_object_array_size(o) >= 6 && jmsgpack_object_type(jmsgpack_object_array_at(o, 5)) == JMSGPACK_OBJECT_STR) {
+                        size_t nl = jmsgpack_object_str_size(jmsgpack_object_array_at(o, 5));
                         if (nl > sizeof(d.nickname) - 1) nl = sizeof(d.nickname) - 1;
-                        memcpy(d.nickname, o->via.array.ptr[5].via.str.ptr, nl);
+                        memcpy(d.nickname, jmsgpack_object_str_ptr(jmsgpack_object_array_at(o, 5)), nl);
                         d.nickname[nl] = '\0';
                     }
                 }
             } else if constexpr (std::is_same_v<T, S2CPlayerLeave>) {
-                if (o->type == JMSGPACK_OBJECT_ARRAY && o->via.array.size >= 1) {
-                    d.conv = (int)jmp_int(&o->via.array.ptr[0]);
+                if (jmsgpack_object_type(o) == JMSGPACK_OBJECT_ARRAY && jmsgpack_object_array_size(o) >= 1) {
+                    d.conv = (int)jmp_int(jmsgpack_object_array_at(o, 0));
                 }
             } else if constexpr (std::is_same_v<T, S2CPlayerInput>) {
-                if (o->type == JMSGPACK_OBJECT_ARRAY && o->via.array.size >= 5) {
-                    d.conv = (int)jmp_int(&o->via.array.ptr[0]);
-                    d.dir = (int)jmp_int(&o->via.array.ptr[1]);
-                    d.attack = (int8_t)jmp_int(&o->via.array.ptr[2]);
-                    d.yaw_quantized = (int16_t)jmp_int(&o->via.array.ptr[3]);
-                    d.client_seq = (uint32_t)jmp_int(&o->via.array.ptr[4]);
+                if (jmsgpack_object_type(o) == JMSGPACK_OBJECT_ARRAY && jmsgpack_object_array_size(o) >= 5) {
+                    d.conv = (int)jmp_int(jmsgpack_object_array_at(o, 0));
+                    d.dir = (int)jmp_int(jmsgpack_object_array_at(o, 1));
+                    d.attack = (int8_t)jmp_int(jmsgpack_object_array_at(o, 2));
+                    d.yaw_quantized = (int16_t)jmp_int(jmsgpack_object_array_at(o, 3));
+                    d.client_seq = (uint32_t)jmp_int(jmsgpack_object_array_at(o, 4));
                 }
             }
         }
@@ -455,12 +459,12 @@ static inline int unpack_command(const char* data, int len,
     // checksum 字符串（索引 4，服务端权威值，客户端用于帧同步校验）
     if (checksum_out && checksum_cap > 0) {
         checksum_out[0] = '\0';
-        if (pl->via.array.size >= 5) {
-            auto* cs = &pl->via.array.ptr[4];
-            if (cs->type == JMSGPACK_OBJECT_STR) {
-                size_t cl = cs->via.str.size;
+        if (jmsgpack_object_array_size(pl) >= 5) {
+            auto* cs = jmsgpack_object_array_at(pl, 4);
+            if (jmsgpack_object_type(cs) == JMSGPACK_OBJECT_STR) {
+                size_t cl = jmsgpack_object_str_size(cs);
                 if (cl > (size_t)(checksum_cap - 1)) cl = (size_t)(checksum_cap - 1);
-                memcpy(checksum_out, cs->via.str.ptr, cl);
+                memcpy(checksum_out, jmsgpack_object_str_ptr(cs), cl);
                 checksum_out[cl] = '\0';
             }
         }
@@ -482,33 +486,34 @@ static inline int unpack_c2s(const char* data, int len,
     jmsgpack_unpacked_init(&r);
     size_t off = 0;
     if (jmsgpack_unpack_next(&r, data, len, &off) < 0) { jmsgpack_unpacked_destroy(&r); return 0; }
-    if (r.data.type != JMSGPACK_OBJECT_ARRAY || r.data.via.array.size < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
-    *cmd = (int)jmp_int(&r.data.via.array.ptr[0]);
-    auto* payload = &r.data.via.array.ptr[1];
-    if (payload->type == JMSGPACK_OBJECT_ARRAY) {
+    const jmsgpack_object_t* root = jmsgpack_unpacked_data(&r);
+    if (jmsgpack_object_type(root) != JMSGPACK_OBJECT_ARRAY || jmsgpack_object_array_size(root) < 2) { jmsgpack_unpacked_destroy(&r); return 0; }
+    *cmd = (int)jmp_int(jmsgpack_object_array_at(root, 0));
+    auto* payload = jmsgpack_object_array_at(root, 1);
+    if (jmsgpack_object_type(payload) == JMSGPACK_OBJECT_ARRAY) {
         switch (*cmd) {
         case CMD_PLAYER_JOIN:
-            if (payload->via.array.size >= 3) {
-                *join_x = jmp_int(&payload->via.array.ptr[0]);
-                *join_y = jmp_int(&payload->via.array.ptr[1]);
-                *join_z = jmp_int(&payload->via.array.ptr[2]);
+            if (jmsgpack_object_array_size(payload) >= 3) {
+                *join_x = jmp_int(jmsgpack_object_array_at(payload, 0));
+                *join_y = jmp_int(jmsgpack_object_array_at(payload, 1));
+                *join_z = jmp_int(jmsgpack_object_array_at(payload, 2));
             }
-            if (join_char_id && payload->via.array.size >= 4) {
-                *join_char_id = (int32_t)jmp_int(&payload->via.array.ptr[3]);
+            if (join_char_id && jmsgpack_object_array_size(payload) >= 4) {
+                *join_char_id = (int32_t)jmp_int(jmsgpack_object_array_at(payload, 3));
             }
-            if (join_nickname && nickname_cap > 0 && payload->via.array.size >= 5 &&
-                payload->via.array.ptr[4].type == JMSGPACK_OBJECT_STR) {
-                size_t nl = payload->via.array.ptr[4].via.str.size;
+            if (join_nickname && nickname_cap > 0 && jmsgpack_object_array_size(payload) >= 5 &&
+                jmsgpack_object_type(jmsgpack_object_array_at(payload, 4)) == JMSGPACK_OBJECT_STR) {
+                size_t nl = jmsgpack_object_str_size(jmsgpack_object_array_at(payload, 4));
                 if (nl > (size_t)(nickname_cap - 1)) nl = (size_t)(nickname_cap - 1);
-                memcpy(join_nickname, payload->via.array.ptr[4].via.str.ptr, nl);
+                memcpy(join_nickname, jmsgpack_object_str_ptr(jmsgpack_object_array_at(payload, 4)), nl);
                 join_nickname[nl] = '\0';
             }
             break;
         case CMD_PLAYER_INPUT:
-            if (payload->via.array.size >= 3) {
-                *input_dir = (int)jmp_int(&payload->via.array.ptr[0]);
-                *input_attack = (int)jmp_int(&payload->via.array.ptr[1]);
-                *input_yaw = (int16_t)jmp_int(&payload->via.array.ptr[2]);
+            if (jmsgpack_object_array_size(payload) >= 3) {
+                *input_dir = (int)jmp_int(jmsgpack_object_array_at(payload, 0));
+                *input_attack = (int)jmp_int(jmsgpack_object_array_at(payload, 1));
+                *input_yaw = (int16_t)jmp_int(jmsgpack_object_array_at(payload, 2));
             }
             break;
         }

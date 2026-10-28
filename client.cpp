@@ -221,10 +221,15 @@ static void network_receive_client(Context* ctx)
 			jmsgpack_unpacked_init(&r);
 			size_t off = 0;
 			int cmd = S2C_CMD_NONE;
-			if (jmsgpack_unpack_next(&r, (const char*)msg.data, (int)msg.len, &off) >= 0
-				&& r.data.type == JMSGPACK_OBJECT_ARRAY && r.data.via.array.size >= 2
-				&& r.data.via.array.ptr[0].type == JMSGPACK_OBJECT_POSITIVE_INTEGER)
-				cmd = (int)r.data.via.array.ptr[0].via.u64;
+			if (jmsgpack_unpack_next(&r, (const char*)msg.data, (int)msg.len, &off) >= 0) {
+				const jmsgpack_object_t* root = jmsgpack_unpacked_data(&r);
+				if (root && jmsgpack_object_type(root) == JMSGPACK_OBJECT_ARRAY
+						&& jmsgpack_object_array_size(root) >= 2) {
+					const jmsgpack_object_t* first = jmsgpack_object_array_at(root, 0);
+					if (first && jmsgpack_object_type(first) == JMSGPACK_OBJECT_POSITIVE_INTEGER)
+						cmd = (int)jmsgpack_object_u64(first);
+				}
+			}
 			jmsgpack_unpacked_destroy(&r);
 
 			if (cmd == S2C_CMD_LOADING) {
