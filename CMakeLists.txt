@@ -51,6 +51,13 @@ if (ANDROID)
     add_library(${EXECUTABLE_NAME} SHARED)
 else()
     add_executable(${EXECUTABLE_NAME})
+    # Linux 下可执行文件名与资产命名空间目录同名（如 project_proxy3d），
+    # 无后缀的 exe 文件会抢占该目录名导致资产拷贝失败；把 exe 放进同名子目录，
+    # 使其成为真正的目录以同时容纳 exe 与资产（与 Windows .exe 行为一致）。
+    if(UNIX AND NOT APPLE)
+        set_target_properties(${EXECUTABLE_NAME} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>/${EXECUTABLE_NAME}")
+    endif()
 endif()
 
 file(GLOB SRC_FILES CONFIGURE_DEPENDS "*.h"  "*.c" "*.hpp" "*.cpp" "scenes/*.h" "scenes/*.cpp" "layers/*.h" "layers/*.cpp" "systems/*.h" "systems/*.cpp" "passes/*.h" "passes/*.cpp" "components/*.h" "components/*.cpp" "network/*.h" "network/*.cpp" "*.h" "shared/*.h" "shared/components/*.h" "shared/systems/*.h")
