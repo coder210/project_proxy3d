@@ -84,12 +84,14 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     ctx->r3d = r3d_create(ctx->window, "shaders");
     if (!ctx->r3d) {
         log_error("r3d_create failed (GPU unavailable or shaders missing in shaders)");
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "无法启动 3D 渲染",
-            "r3d_create 失败，最可能原因：\n"
-            "1) 设备/模拟器不支持 Vulkan（SDL_GPU 在安卓仅支持 Vulkan，无 OpenGL 回退）；\n"
-            "2) assets/shaders 未正确打包进 APK。\n"
-            "请用真机，或开启 Vulkan 的模拟器镜像测试。",
-            NULL);
+        const char* sdlerr = SDL_GetError();
+        char msg[640];
+        SDL_snprintf(msg, sizeof(msg),
+            "r3d_create 失败。SDL 最后错误：\n%s\n\n"
+            "• 若含 \"Could not create GPU device\" / \"vkCreateInstance\" → 该设备 Vulkan 不可用或驱动不兼容；\n"
+            "• 若含 \"CreateGPUShader\" / \"SPIR-V\" → 着色器 SPIR-V 在该 Vulkan 驱动（Mali 等移动 GPU）编译失败。",
+            (sdlerr && *sdlerr) ? sdlerr : "(无错误信息)");
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "无法启动 3D 渲染", msg, NULL);
         return SDL_APP_FAILURE;
     }
     // 清屏色统一为白色（UI 场景与 game_scene 均为白底蓝图风）
