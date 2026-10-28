@@ -27,8 +27,8 @@ static bool knockback_blocked(entt::registry& registry, StaticView& static_view,
 
     for (auto o : static_view) {
         if (o == e) continue;
-        auto& och = static_view.get<ColliderComponent>(o);
-        auto& opos = static_view.get<LogicPositionComponent>(o);
+        auto& och = static_view.template get<ColliderComponent>(o);
+        auto& opos = static_view.template get<LogicPositionComponent>(o);
         gjk3df_collider_t other_shape;
         vec3f_t oposv = { opos.x, opos.y, opos.z };
         if (och.type == ColliderComponent::SPHERE) {
