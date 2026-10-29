@@ -56,6 +56,35 @@ static void handle_transition_event(SDL_Event* e) {
     }
 }
 
+/* ---- 2D UI 逻辑分辨率自适应（仿 joy_topdown_template 的 presentation_set_adaptive）----
+   逻辑高固定 320（设计高度，UI 按 480x320 设计稿布局），
+   逻辑宽 = 320 * 输出宽/输出高（随屏幕宽高比变化，并裁剪极端值）。
+   配 LETTERBOX 呈现后逻辑空间宽高比 == 屏幕宽高比 → 无缝铺满且等比缩放：
+     - 圆/文字在任意宽高比（安卓 16:9/20:9）下都不拉伸变形；
+     - 左右无留边，控件可由各 layer 锚定到屏幕真实边缘。
+   每帧调用以自动处理旋转/全屏切换（仅逻辑宽变化时才重设）。 */
+static int g_ui_logical_w = 0;
+static void apply_adaptive_logical_presentation(void) {
+    if (!ctx || !ctx->r3d) return;
+    int ow = 0, oh = 0;
+    r3d_get_window_size(ctx->r3d, &ow, &oh);
+    if (ow <= 0 || oh <= 0) { ow = 480; oh = 320; }   // 初始化/切后台瞬间兜底
+
+    const int design_h = 320;
+    // 仅对战场景开启自适应宽度；其余场景固定 480（自动居中）
+    int lw = 480;
+    if (ctx->ui_adaptive_layout) {
+        lw = (int)((float)design_h * (float)ow / (float)oh + 0.5f);
+        if (lw < 480)  lw = 480;    // 竖长窗口兜底
+        if (lw > 1200) lw = 1200;   // 超宽窗口兜底
+    }
+
+    if (lw != g_ui_logical_w) {
+        g_ui_logical_w = lw;
+        r3d_set_logical_presentation_mode(ctx->r3d, lw, design_h, JOY_LOGICAL_PRESENTATION_LETTERBOX);
+    }
+}
+
 extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     (void)appstate;
     sys_init_netenv();
@@ -137,8 +166,8 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
     // 清屏色统一为白色（UI 场景与 game_scene 均为白底蓝图风）
     r3d_set_clear_color(ctx->r3d, 255, 255, 255);
-    // 设置逻辑分辨率 480x320 + LETTERBOX 等比居中：2D UI 等比缩放，圆/文字在任意屏宽比（安卓 16:9/20:9）下都不拉伸变形
-    r3d_set_logical_presentation_mode(ctx->r3d, 480, 320, JOY_LOGICAL_PRESENTATION_LETTERBOX);
+    // 设置 2D UI 逻辑分辨率（自适应宽度 + LETTERBOX 等比铺满，随后每帧自动刷新）
+    apply_adaptive_logical_presentation();
     // 初始化字体/资源：统一交给 ResourceManager（仿 joy_topdown_template 的 AssetManager 思路），
     // 按可执行文件目录稳健解析资源路径，不再依赖运行时 CWD。详细日志见 [ResourceManager]。
     ResourceManager::Init(ctx->r3d);
@@ -279,6 +308,8 @@ extern "C" SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* e) {
 }
 
 extern "C" SDL_AppResult SDL_AppIterate(void*) {
+    // 每帧刷新自适应逻辑分辨率（处理旋转/全屏切换导致的屏幕宽高比变化）
+    apply_adaptive_logical_presentation();
     game_timer_update(&ctx->game_timer);
     float dt = game_timer_get_delta_time(&ctx->game_timer);
     ctx->scene_mgr->Update(dt);

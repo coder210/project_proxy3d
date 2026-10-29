@@ -70,6 +70,8 @@ void GameScene::Load() {
         g_gameplay_controls = gameplay_controls_layer_create(ctx);
         g_pause_menu = pause_menu_layer_create(ctx);
     }
+    // 对战场景启用自适应逻辑宽度：屏幕按钮铺满真实屏幕、不受黑边限制
+    ctx->ui_adaptive_layout = true;
 
     // 公共 systems
     add_system(ctx, PreUpdate, "input_consume_join", input_consume_join_system);
@@ -197,6 +199,8 @@ void GameScene::Destroy() {
         pause_menu_layer_destroy(g_pause_menu);
         g_pause_menu = NULL;
     }
+    // 离开对战场景：恢复固定 480x320 LETTERBOX，使其它全屏场景保持居中排布
+    ctx->ui_adaptive_layout = false;
 
     // 退出时统一落盘帧同步校验记录（server/host 与 client 分别写文件，便于 diff）
     if (ctx && !ctx->checksum_records.empty()) {

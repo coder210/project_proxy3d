@@ -257,6 +257,12 @@ struct Context {
 	// 控制 Frame/LogicFPS/Enemies/EID 调试行是否显示，默认关闭。
 	bool show_debug_hud = false;
 
+	// 是否启用“自适应逻辑宽度”（仿 joy_topdown_template 的 presentation_set_adaptive）。
+	// 开启后逻辑宽度 = 320 * 输出宽/输出高（铺满屏幕、无留边，屏幕按钮由 layer 锚定到真实边缘）；
+	// 关闭则用固定 480x320 LETTERBOX（自动居中）。仅对战场景开启——
+	// 其余全屏场景(主菜单/设置/结算等)文字按 480 居中排布，自适应宽度会导致整体偏左。
+	bool ui_adaptive_layout = false;
+
 	// 逻辑层 → 渲染层 借道缓冲：逻辑 system 把攻击挥击特效请求写入，渲染 pass 每帧消费并清空。
 	std::vector<AttackFlashRequest> attack_flashes;
 

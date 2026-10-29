@@ -8,6 +8,10 @@
 // 当前场景的活动暂停面板（hud_pass 读取，game_scene 创建/销毁）
 pause_menu_layer_p g_pause_menu = NULL;
 
+/* 上一次布局所用的逻辑宽度(0=未初始化)。自适应逻辑宽度后须在逻辑宽变化时重算控件位置。
+   注意：必须在 pause_menu_layer_create 之前声明（create 会重置它）。 */
+static int g_pm_layout_lw = 0;
+
 typedef enum {
     PM_NONE = 0,
     PM_MENU,
@@ -67,6 +71,7 @@ pause_menu_layer_p pause_menu_layer_create(Context* ctx) {
     self->ctx = ctx;
     self->page = PM_NONE;
     self->confirm_target = PM_CONFIRM_NONE;
+    g_pm_layout_lw = 0;   // 新实例：重置布局缓存，确保首帧按当前逻辑宽度重算
 
     // 右上角暂停按钮（圆形）
     self->btn_pause = r3d_button_create(444, 4, 32, 32, "||");
@@ -181,8 +186,44 @@ static void handle_modal(pause_menu_layer_p self, const void* ev) {
     dispatch_event(cbs, ev, self);
 }
 
+/* 布局与逻辑宽度解耦（仿 joy_topdown_template 的 syncLayout）：
+   自适应逻辑宽度后逻辑区不再是固定 480 宽，菜单若不重算会偏离屏幕中央；
+   这里把右上角暂停按钮锚定真实右边缘，其余控件/面板按设计稿 480 居中平移。
+   仅在逻辑宽度变化时重算。 */
+static void pause_menu_sync_layout(pause_menu_layer_p self) {
+    if (!self || !self->ctx || !self->ctx->r3d) return;
+    int lw = 0, lh = 0;
+    r3d_get_logical_presentation(self->ctx->r3d, &lw, &lh);
+    if (lw <= 0) return;
+    if (lw == g_pm_layout_lw) return;
+    g_pm_layout_lw = lw;
+
+    const float ox = ((float)lw - 480.0f) * 0.5f;   // 超出设计稿宽度的居中平移量
+
+    // 右上角暂停按钮：锚定真实右边缘（设计稿 x=444, w=32, 右留边 4）
+    if (self->btn_pause) self->btn_pause->x = (float)lw - self->btn_pause->w - 4.0f;
+
+    // 菜单页按钮（设计稿 x=160）
+    if (self->btn_resume)   self->btn_resume->x   = 160.0f + ox;
+    if (self->btn_settings) self->btn_settings->x = 160.0f + ox;
+    if (self->btn_mainmenu) self->btn_mainmenu->x = 160.0f + ox;
+    if (self->btn_quit)     self->btn_quit->x     = 160.0f + ox;
+
+    // 设置页
+    if (self->bgm_slider) self->bgm_slider->x = 180.0f + ox;
+    if (self->sfx_slider) self->sfx_slider->x = 180.0f + ox;
+    if (self->cb_debug)   self->cb_debug->x   = 110.0f + ox;
+    if (self->btn_back)   self->btn_back->x   = 180.0f + ox;
+
+    // 确认对话框
+    if (self->btn_yes) self->btn_yes->x = 155.0f + ox;
+    if (self->btn_no)  self->btn_no->x  = 245.0f + ox;
+}
+
 bool pause_menu_layer_handle_event(pause_menu_layer_p self, const void* ev) {
     if (!self) return false;
+    // 命中判定前确保控件几何与当前逻辑宽度一致（否则旋转/全屏后点不中）
+    pause_menu_sync_layout(self);
     const SDL_Event* e = (const SDL_Event*)ev;
 
     // ESC：开/关菜单
@@ -235,7 +276,14 @@ void pause_menu_layer_render(pause_menu_layer_p self) {
     Context* ctx = self->ctx;
     jr3d_p r3d = ctx->r3d;
     render_mesh_p q = ctx->ui_quad;
-    const float W = 480, H = 320;
+    pause_menu_sync_layout(self);
+
+    int lw = 0, lh = 0;
+    r3d_get_logical_presentation(r3d, &lw, &lh);
+    if (lw <= 0) lw = 480;
+    if (lh <= 0) lh = 320;
+    const float W = 480.0f, H = 320.0f;          // 设计稿尺寸(LETTERBOX 下传给 r3d 仅作正数校验)
+    const float ox = ((float)lw - W) * 0.5f;     // 超出设计稿宽度的居中平移量
 
     if (self->page == PM_NONE) {
         if (self->btn_pause) r3d_button_draw_circle(r3d, q, self->btn_pause, W, H);
@@ -243,34 +291,34 @@ void pause_menu_layer_render(pause_menu_layer_p self) {
     }
 
     // 遮罩（r3d_draw_rect_2d 不支持 alpha，故为不透明黑色背景；菜单/面板画在其上）
-    r3d_draw_rect_2d(r3d, q, 0, 0, W, H, 0, 0, 0, W, H);
+    r3d_draw_rect_2d(r3d, q, 0, 0, (float)lw, (float)lh, 0, 0, 0, W, H);
 
     if (self->page == PM_MENU) {
-        draw_panel(r3d, q, 120, 55, 240, 200, W, H);
-        r3d_font_draw_2d_color(r3d, q, "暂停", 212, 65, 24, W, H, 230, 230, 230);
+        draw_panel(r3d, q, 120 + ox, 55, 240, 200, W, H);
+        r3d_font_draw_2d_color(r3d, q, "暂停", 212 + ox, 65, 24, W, H, 230, 230, 230);
         r3d_button_draw(r3d, q, self->btn_resume, W, H);
         r3d_button_draw(r3d, q, self->btn_settings, W, H);
         r3d_button_draw(r3d, q, self->btn_mainmenu, W, H);
         r3d_button_draw(r3d, q, self->btn_quit, W, H);
     } else if (self->page == PM_SETTINGS) {
-        draw_panel(r3d, q, 100, 40, 280, 250, W, H);
-        r3d_font_draw_2d_color(r3d, q, "设置", 214, 50, 24, W, H, 230, 230, 230);
-        r3d_font_draw_2d_color(r3d, q, "音乐", 110, 92, 16, W, H, 200, 200, 200);
-        r3d_font_draw_2d_color(r3d, q, "音效", 110, 132, 16, W, H, 200, 200, 200);
+        draw_panel(r3d, q, 100 + ox, 40, 280, 250, W, H);
+        r3d_font_draw_2d_color(r3d, q, "设置", 214 + ox, 50, 24, W, H, 230, 230, 230);
+        r3d_font_draw_2d_color(r3d, q, "音乐", 110 + ox, 92, 16, W, H, 200, 200, 200);
+        r3d_font_draw_2d_color(r3d, q, "音效", 110 + ox, 132, 16, W, H, 200, 200, 200);
         char pct[16];
         snprintf(pct, sizeof(pct), "%d%%", (int)(r3d_slider_get_value(self->bgm_slider) * 100.0f));
-        r3d_font_draw_2d_color(r3d, q, pct, 350, 92, 16, W, H, 200, 200, 200);
+        r3d_font_draw_2d_color(r3d, q, pct, 350 + ox, 92, 16, W, H, 200, 200, 200);
         snprintf(pct, sizeof(pct), "%d%%", (int)(r3d_slider_get_value(self->sfx_slider) * 100.0f));
-        r3d_font_draw_2d_color(r3d, q, pct, 350, 132, 16, W, H, 200, 200, 200);
+        r3d_font_draw_2d_color(r3d, q, pct, 350 + ox, 132, 16, W, H, 200, 200, 200);
         r3d_slider_draw(r3d, q, self->bgm_slider, W, H);
         r3d_slider_draw(r3d, q, self->sfx_slider, W, H);
         r3d_checkbox_draw(r3d, q, self->cb_debug, W, H);
         r3d_button_draw(r3d, q, self->btn_back, W, H);
     } else if (self->page == PM_CONFIRM) {
-        draw_panel(r3d, q, 140, 110, 200, 100, W, H);
+        draw_panel(r3d, q, 140 + ox, 110, 200, 100, W, H);
         r3d_font_draw_2d_color(r3d, q,
             self->confirm_target == PM_CONFIRM_QUIT ? "退出游戏？" : "返回主菜单？",
-            158, 122, 18, W, H, 230, 230, 230);
+            158 + ox, 122, 18, W, H, 230, 230, 230);
         r3d_button_draw(r3d, q, self->btn_yes, W, H);
         r3d_button_draw(r3d, q, self->btn_no, W, H);
     }

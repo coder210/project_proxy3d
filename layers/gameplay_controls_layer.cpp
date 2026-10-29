@@ -169,6 +169,10 @@ static render_mesh_p get_js_disc(Context* ctx)
 	return g_js_disc;
 }
 
+/* 上一次布局所用的逻辑宽度(0=未初始化)。自适应逻辑宽度后须在逻辑宽变化时重算右下键位置。
+   注意：必须在 gameplay_controls_layer_create 之前声明（create 会重置它）。 */
+static int g_controls_layout_lw = 0;
+
 struct gameplay_controls_layer {
 	Context* ctx;
 	// 左下摇杆
@@ -219,6 +223,9 @@ gameplay_controls_layer_p gameplay_controls_layer_create(Context* ctx)
 	self->nub_tex = r3d_load_texture_png(ctx->r3d, "ui/joystick_circle_nub_c.png", &tw, &th);
 	log_info("[controls] joystick textures: pad=%p nub=%p", self->pad_tex, self->nub_tex);
 
+	// 新实例：重置布局缓存，确保首帧按当前逻辑宽度重算右下键位置
+	g_controls_layout_lw = 0;
+
 	// 右下操作键: 攻击/射击/射线
 	self->btn_attack = r3d_button_create(412, 254, 64, 64, "攻");   // 主攻击: 最靠右下角
 	self->btn_bullet = r3d_button_create(340, 254, 58, 58, "射");   // 射击: 攻左下方
@@ -226,9 +233,37 @@ gameplay_controls_layer_p gameplay_controls_layer_create(Context* ctx)
 	return self;
 }
 
+/* 右下操作键布局与逻辑宽度解耦（仿 joy_topdown_template 的 syncLayout）：
+   自适应逻辑宽度后逻辑区不再是固定 480 宽，若沿用绝对 x 会离屏幕右边缘越来越远；
+   这里按设计稿的“右留边 / 相互间距”重新锚定到逻辑区右边缘。
+   摇杆本身锚左下（JS_CX=72+9.6、JS_CY=320-72-24），且逻辑高恒为 320（== 设计高度），
+   故 JS_* 常量无需改动。仅在逻辑宽度变化时重算。 */
+static void controls_sync_layout(gameplay_controls_layer_p self)
+{
+	if (!self || !self->ctx || !self->ctx->r3d) return;
+	int lw = 0, lh = 0;
+	r3d_get_logical_presentation(self->ctx->r3d, &lw, &lh);
+	if (lw <= 0) return;
+	if (lw == g_controls_layout_lw) return;
+	g_controls_layout_lw = lw;
+
+	/* 设计稿 480x320 下的几何关系: 攻 x=412(w64,右留边4); 射 x=340(攻左侧,间隔14); 线 x=408(w58,右留边14) */
+	const float ATK_W = 64.0f, ATK_MR = 4.0f;
+	const float BUL_W = 58.0f, BUL_GAP = 14.0f;
+	const float RAY_W = 58.0f, RAY_MR = 14.0f;
+
+	const float ax = (float)lw - ATK_W - ATK_MR;
+	if (self->btn_attack) self->btn_attack->x = ax;
+	if (self->btn_bullet) self->btn_bullet->x = ax - BUL_W - BUL_GAP;
+	if (self->btn_ray)    self->btn_ray->x    = (float)lw - RAY_W - RAY_MR;
+}
+
 void gameplay_controls_layer_handle_event(gameplay_controls_layer_p self, const void* ev)
 {
 	if (!self) return;
+
+	// 命中判定前先确保右下键几何与当前逻辑宽度一致（否则旋转/全屏后点不中）
+	controls_sync_layout(self);
 
 	jevent_callbacks_t cbs = {};
 	cbs.on_mousepressed = [](float x, float y, int btn, void* arg) {
@@ -321,6 +356,9 @@ void gameplay_controls_layer_render(gameplay_controls_layer_p self)
 	jr3d_p r3d = ctx->r3d;
 	render_mesh_p m = ctx->ui_quad;
 	if (!m) return;
+
+	// 绘制前确保右下键锚定到当前逻辑宽度(自适应后不再是固定 480 宽)
+	controls_sync_layout(self);
 
 	// 键盘同步到摇杆圆钮(未拖拽时, 纯显示): 按 WASD 时圆钮偏向对应方向
 	if (!self->js_active) {
