@@ -16,14 +16,15 @@ public:
     void Destroy() override;
 private:
     void draw_level(int i);
+    void draw_preview(int index);
     GameMode target_mode;
     int selected = 0;
+    int hovered_ = -1;
     int enemy_cnt[LEVEL_COUNT] = { 0 };
+    bool mini_wall_[LEVEL_COUNT][16 * 16] = {};   // 每关粗采样(16x16)墙位图，供右侧迷你地图
     jr3d_button_p btn_levels[LEVEL_COUNT] = { NULL };
     jr3d_button_p btn_confirm = NULL;
     jr3d_button_p btn_back = NULL;
-    ui_particles particles{};
-    float elapsed = 0.0f;
 };
 
 #endif

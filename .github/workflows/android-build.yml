@@ -85,6 +85,14 @@ jobs:
           }
           EOF
 
+      - name: Inject android:roundIcon (MIUI/HyperOS 仅声明 android:icon 时会显示空白图标)
+        run: |
+          cd third_party/joy/SDL/android-project/app/src/main/
+          if ! grep -q 'android:roundIcon' AndroidManifest.xml; then
+            sed -i 's#android:icon="@mipmap/ic_launcher"#android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher"#' AndroidManifest.xml
+          fi
+          grep -n 'android:icon\|android:roundIcon' AndroidManifest.xml
+
       - name: Build APK
         run: |
           cd third_party/joy/SDL/android-project/

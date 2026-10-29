@@ -3,8 +3,9 @@
 #include <joy/joy.h>
 #include "../context.h"
 #include "scene.h"
-#include "ui_particles.h"
 
+// 联机大厅：仿 joy_topdown_template 的 online_scene 版式
+//  顶部墨带 + 右上「直连」 / 左侧房间列表 + 右侧详情 / 底部按钮条 / 直连弹窗
 class OnlineScene : public Scene {
 public:
     OnlineScene(Context* ctx);
@@ -14,13 +15,19 @@ public:
     void Render() override;
     void Destroy() override;
 private:
-    jr3d_label_p label_title = NULL;
-    jr3d_button_p btn_host = NULL;
-    jr3d_button_p btn_client = NULL;
-    jr3d_button_p btn_server = NULL;
-    jr3d_button_p btn_back = NULL;
-    ui_particles particles{};
-    float elapsed = 0.0f;
+    void set_direct_open(bool open);
+    void direct_connect();
+
+    jr3d_button_p btn_create  = NULL;   // 创建房间(HOST)
+    jr3d_button_p btn_join    = NULL;   // 加入房间(CLIENT)
+    jr3d_button_p btn_server  = NULL;   // 服务端(SERVER)
+    jr3d_button_p btn_back    = NULL;   // 返回(BACK)
+    jr3d_button_p btn_direct  = NULL;   // 右上「直连」
+    jr3d_button_p btn_cancel  = NULL;   // 弹窗「取消」
+    jr3d_button_p btn_connect = NULL;   // 弹窗「连接」
+    jr3d_input_p  ip_input    = NULL;
+    jr3d_input_p  port_input  = NULL;
+    bool direct_open_ = false;
 };
 
 #endif

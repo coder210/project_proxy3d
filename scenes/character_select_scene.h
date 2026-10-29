@@ -16,14 +16,14 @@ public:
     void Destroy() override;
 private:
     void draw_card(int i);
+    void draw_preview(int index);
     GameMode target_mode;
-    ui_particles particles{};
-    float elapsed = 0.0f;
     jr3d_button_p btn_cards[CHAR_COUNT] = { NULL };
     jr3d_button_p btn_confirm = NULL;
     jr3d_button_p btn_back = NULL;
     jr3d_input_p nickname_input = NULL;
     int selected = 0;
+    int hovered_ = -1;
 };
 
 #endif
