@@ -7,6 +7,7 @@
 #include "game_scene.h"
 #include "../game_mode.h"
 #include "../layers/gameplay_controls_layer.h"
+#include "../layers/pause_menu_layer.h"
 #include "../passes/render3d_pass.h"
 #include "systems/wave_system.h"
 #include "systems/wave_spawn_system.h"
@@ -67,6 +68,7 @@ void GameScene::Load() {
     // 虚拟操作层（单机/Host/客户端有本地玩家才显示；独立服务端不显示）
     if (!ctx->is_server) {
         g_gameplay_controls = gameplay_controls_layer_create(ctx);
+        g_pause_menu = pause_menu_layer_create(ctx);
     }
 
     // 公共 systems
@@ -90,6 +92,9 @@ void GameScene::Load() {
 }
 
 void GameScene::HandleEvent(const void* ev) {
+    // 暂停/设置面板优先处理：菜单打开时吞掉事件，避免透传给游戏（含摇杆/攻击键）
+    if (g_pause_menu && pause_menu_layer_handle_event(g_pause_menu, ev)) return;
+
     // F1 切换调试信息（Frame/LogicFPS/Enemies/EID），仿 joy_topdown_template 的 show_debug_hud
     const SDL_Event* e = (const SDL_Event*)ev;
     if (e && e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
@@ -187,6 +192,10 @@ void GameScene::Destroy() {
     if (g_gameplay_controls) {
         gameplay_controls_layer_destroy(g_gameplay_controls);
         g_gameplay_controls = NULL;
+    }
+    if (g_pause_menu) {
+        pause_menu_layer_destroy(g_pause_menu);
+        g_pause_menu = NULL;
     }
 
     // 退出时统一落盘帧同步校验记录（server/host 与 client 分别写文件，便于 diff）

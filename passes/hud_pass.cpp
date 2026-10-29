@@ -3,6 +3,7 @@
 #include "../context.h"
 #include "../layers/debug_layer.h"
 #include "../layers/gameplay_controls_layer.h"
+#include "../layers/pause_menu_layer.h"
 
 void hud_pass(Context* ctx) {
 	if (!ctx->r3d) return;
@@ -32,4 +33,7 @@ void hud_pass(Context* ctx) {
 
 	// 虚拟操作层（方向键/攻击键）叠加在最上层
 	gameplay_controls_layer_render(g_gameplay_controls);
+
+	// 暂停/设置面板（右上角 || 按钮 + 菜单/设置/确认）画在最上层
+	if (g_pause_menu) pause_menu_layer_render(g_pause_menu);
 }
