@@ -137,8 +137,8 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
     // 清屏色统一为白色（UI 场景与 game_scene 均为白底蓝图风）
     r3d_set_clear_color(ctx->r3d, 255, 255, 255);
-    // 设置逻辑分辨率 480x320：所有 2D UI 以逻辑坐标布局，窗口缩放时等比自适应（与 project_proxy2d 一致）
-    r3d_set_logical_presentation(ctx->r3d, 480, 320);
+    // 设置逻辑分辨率 480x320 + LETTERBOX 等比居中：2D UI 等比缩放，圆/文字在任意屏宽比（安卓 16:9/20:9）下都不拉伸变形
+    r3d_set_logical_presentation_mode(ctx->r3d, 480, 320, JOY_LOGICAL_PRESENTATION_LETTERBOX);
     // 初始化字体/资源：统一交给 ResourceManager（仿 joy_topdown_template 的 AssetManager 思路），
     // 按可执行文件目录稳健解析资源路径，不再依赖运行时 CWD。详细日志见 [ResourceManager]。
     ResourceManager::Init(ctx->r3d);
