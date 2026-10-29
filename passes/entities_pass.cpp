@@ -8,7 +8,6 @@
 #include "components/global_state_component.h"
 #include "components/hit_flash_component.h"
 #include "components/enemy_component.h"
-#include "fog_pass.h"
 
 // 估算 UTF-8 文字世界宽度（ASCII 半宽、CJK 全宽），用于昵称头顶居中
 static float utf8_display_width(const char* s, float size)
@@ -37,11 +36,6 @@ void entities_pass(Context* ctx, float dt) {
 		if (ctx->ecs.all_of<HealthComponent>(e) &&
 			ctx->ecs.get<HealthComponent>(e).dead) continue;
 
-		// 迷雾视野：敌人不在玩家扇形视野内（超距 / 朝向外 / 被墙遮挡）则隐藏，
-		// 玩家与环境不受影响，始终绘制。
-		if (ctx->ecs.all_of<EnemyComponent>(e) &&
-			!fog_entity_visible(ctx, t.position.x, t.position.z)) continue;
-
 		// 受击闪烁：闪烁期间填充色提亮为白色，时间递减到 0 后移除（纯客户端表现）
 		jcolor_t draw_color = mc.color;
 		if (ctx->ecs.all_of<HitFlashComponent>(e)) {
@@ -63,7 +57,7 @@ void entities_pass(Context* ctx, float dt) {
 }
 
 // 玩家昵称头顶显示（屏幕投影方式：固定像素字号，不受相机距离/角度影响）。
-// 独立函数、在雾层之后调用，保证昵称始终浮在迷雾之上可见，不被环境雾遮挡。
+// 独立函数、在实体与地图装饰之后调用，保证昵称浮在最上层不被遮挡。
 void entities_pass_draw_nicknames(Context* ctx) {
 	if (!ctx->r3d) return;
 

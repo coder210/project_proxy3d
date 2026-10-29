@@ -4,7 +4,6 @@
 #include "components/transform_component.h"
 #include "components/health_component.h"
 #include "components/enemy_component.h"
-#include "fog_pass.h"
 
 void health_ring_pass(Context* ctx) {
 	if (!ctx->r3d) return;
@@ -54,10 +53,6 @@ void health_ring_pass(Context* ctx) {
 		auto& t = hp_view.get<TransformComponent>(e);
 		auto& h = hp_view.get<HealthComponent>(e);
 		if (h.dead || h.max_hp <= 0) continue;
-
-		// 迷雾视野：敌人不在玩家扇形视野内则连血环一起隐藏（本体已在 entities_pass 隐藏）。
-		if (ctx->ecs.all_of<EnemyComponent>(e) &&
-			!fog_entity_visible(ctx, t.position.x, t.position.z)) continue;
 
 		float ratio = (float)h.hp / (float)h.max_hp;
 		if (ratio < 0.0f) ratio = 0.0f;
