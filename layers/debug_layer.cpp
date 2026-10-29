@@ -170,11 +170,17 @@ void debug_layer_render_hud(Context* ctx, render_mesh_p quad)
 
 	render_mesh_p q = quad ? quad : g_quad;
 
-	if (g_font_ok && q) {
-		char fpsTxt[96];
-		snprintf(fpsTxt, sizeof(fpsTxt), "FPS: %d  Logic FPS: %d", g_fps, ctx->logic_fps);
-		// 逻辑坐标 480x320，窗口缩放自适应；白底用深灰文字
-		r3d_font_draw_2d_color(ctx->r3d, q, fpsTxt, 10.0f, 10.0f, 24.0f, 480.0f, 320.0f, 60, 60, 70);
+	// 调试信息（F1 开关，仿 joy_topdown_template 的 frame_display_pass）：
+	// 一行显示 帧号 / 逻辑帧率 / 敌人数 / 全局实体 id，1px 白色描边保证在任意背景可读。
+	if (ctx->show_debug_hud && g_font_ok && q) {
+		auto& gs = ctx->ecs.ctx().get<GlobalState>();
+		int enemy_count = 0;
+		for (auto e : ctx->ecs.view<EnemyComponent>()) { (void)e; enemy_count++; }
+		char dbg[128];
+		snprintf(dbg, sizeof(dbg), "FPS: %d  Frame: %d  LogicFPS: %d  Enemies: %d  EID: %d",
+				 g_fps, gs.next_frame_id, ctx->logic_fps, enemy_count, gs.next_entity_id);
+		r3d_font_draw_2d_outline(ctx->r3d, q, dbg, 8.0f, 6.0f, 16.0f, 480.0f, 320.0f,
+								 60, 60, 70, 255, 255, 255, 1.0f);
 	}
 
 	// 本地玩家血量条（左上角 FPS 下方）

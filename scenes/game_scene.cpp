@@ -90,7 +90,14 @@ void GameScene::Load() {
 }
 
 void GameScene::HandleEvent(const void* ev) {
-    // 虚拟操作层优先处理鼠标（方向键/攻击键）
+    // F1 切换调试信息（Frame/LogicFPS/Enemies/EID），仿 joy_topdown_template 的 show_debug_hud
+    const SDL_Event* e = (const SDL_Event*)ev;
+    if (e && e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
+        e->key.scancode == SDL_SCANCODE_F1) {
+        ctx_->show_debug_hud = !ctx_->show_debug_hud;
+        log_info("[debug] show_debug_hud=%d", (int)ctx_->show_debug_hud);
+    }
+    // 虚拟操作层优先处理鼠标（摇杆/攻击键）
     gameplay_controls_layer_handle_event(g_gameplay_controls, ev);
     if (g_mode) g_mode->handle_event(this, ev);
 }

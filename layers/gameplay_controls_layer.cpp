@@ -140,12 +140,72 @@ static void draw_key_corner(Context* ctx, jr3d_button_p btn, const char* key)
 							 1.5f);
 }
 
-// 布局参照 project_proxy2d 的 gameplay_controls_layer（逻辑坐标 480x320）：
-// 左下方向键（W 上 / S 下 / A 左 / D 右，视觉上与键盘 WASD 方位一致），右下攻击键
+// ---- 摇杆几何(逻辑 480x320, 参照 joy_topdown_template 的 syncLayout s=1) ----
+// 底座半径 72, 圆心 (81.6, 224) 锚定左下角; 圆钮半径 30。
+static const float JS_CX    = 81.6f;
+static const float JS_CY    = 224.0f;
+static const float JS_R     = 72.0f;
+static const float JS_NUB_R = 30.0f;
+
+// 单位圆盘(半径 0.5)网格, 贴图缺失时兜底绘制。进程内缓存一份。
+static render_mesh_p g_js_disc = NULL;
+static render_mesh_p get_js_disc(Context* ctx)
+{
+	if (!g_js_disc && ctx && ctx->r3d) {
+		constexpr int SEG = 48;
+		float verts[SEG * 3 * 5];
+		int vi = 0;
+		for (int i = 0; i < SEG; i++) {
+			float a0 = (float)i / SEG * 6.2831853f;
+			float a1 = (float)(i + 1) / SEG * 6.2831853f;
+			float p0x = cosf(a0) * 0.5f, p0y = sinf(a0) * 0.5f;
+			float p1x = cosf(a1) * 0.5f, p1y = sinf(a1) * 0.5f;
+			verts[vi++]=0.0f; verts[vi++]=0.0f; verts[vi++]=0; verts[vi++]=0; verts[vi++]=0;
+			verts[vi++]=p0x; verts[vi++]=p0y; verts[vi++]=0; verts[vi++]=0; verts[vi++]=0;
+			verts[vi++]=p1x; verts[vi++]=p1y; verts[vi++]=0; verts[vi++]=0; verts[vi++]=0;
+		}
+		g_js_disc = r3d_mesh_custom(ctx->r3d, verts, vi / 5);
+	}
+	return g_js_disc;
+}
+
 struct gameplay_controls_layer {
 	Context* ctx;
-	jr3d_button_p btn_up, btn_down, btn_left, btn_right, btn_attack, btn_bullet, btn_ray;
+	// 左下摇杆
+	float nub_dx, nub_dy;      // 圆钮相对底座中心的偏移(逻辑像素), 未推为 0
+	bool  js_active;
+	void* pad_tex;
+	void* nub_tex;
+	// 右下操作键
+	jr3d_button_p btn_attack, btn_bullet, btn_ray;
 };
+
+// 由指针逻辑坐标更新摇杆: 夹紧偏移 -> 计算方向 -> 置/清四个方向位(八向, 含死区)。
+// 每次调用先无条件清四个方向位再按当前向量置位, 保证方向实时跟随(与模板 updateStick 一致)。
+static void js_update(gameplay_controls_layer_p self, float lx, float ly)
+{
+	if (!self || !self->ctx) return;
+	float dx = lx - JS_CX;
+	float dy = ly - JS_CY;
+	float len = sqrtf(dx * dx + dy * dy);
+	if (len > JS_R) { dx = dx / len * JS_R; dy = dy / len * JS_R; }  // 夹紧到底座半径
+	self->nub_dx = dx;
+	self->nub_dy = dy;
+
+	int* mask = &self->ctx->current_input_mask;
+	*mask &= ~(INPUT_UP | INPUT_DOWN | INPUT_LEFT | INPUT_RIGHT);
+
+	float nx = (JS_R > 0) ? dx / JS_R : 0.0f;   // -1..1
+	float ny = (JS_R > 0) ? dy / JS_R : 0.0f;
+	float mag = sqrtf(nx * nx + ny * ny);
+	if (mag > 0.25f) {
+		// 屏幕 Y 向下: ny<0 = 上, ny>0 = 下
+		if (ny < -0.35f) *mask |= INPUT_UP;
+		if (ny >  0.35f) *mask |= INPUT_DOWN;
+		if (nx < -0.35f) *mask |= INPUT_LEFT;
+		if (nx >  0.35f) *mask |= INPUT_RIGHT;
+	}
+}
 
 gameplay_controls_layer_p gameplay_controls_layer_create(Context* ctx)
 {
@@ -153,21 +213,22 @@ gameplay_controls_layer_p gameplay_controls_layer_create(Context* ctx)
 	memset(self, 0, sizeof(*self));
 	self->ctx = ctx;
 
-	self->btn_up    = r3d_button_create(50, 170, 50, 50, "上");
-	self->btn_down  = r3d_button_create(50, 270, 50, 50, "下");
-	self->btn_left  = r3d_button_create(0,  220, 50, 50, "左");
-	self->btn_right = r3d_button_create(100, 220, 50, 50, "右");
-	self->btn_attack = r3d_button_create(412, 254, 64, 64, "攻");   // 主攻击：最靠右下角(拇指位)
-	self->btn_bullet = r3d_button_create(340, 254, 58, 58, "射");   // 射击：攻左下方，与攻并排
-	self->btn_ray    = r3d_button_create(408, 176, 58, 58, "线");   // 射线(大招)：弧形顶端
+	// 摇杆贴图(相对 exe 目录: CMake 把 assets/ui/* 拷到 <exe>/ui/*)
+	int tw = 0, th = 0;
+	self->pad_tex = r3d_load_texture_png(ctx->r3d, "ui/joystick_circle_pad_c.png", &tw, &th);
+	self->nub_tex = r3d_load_texture_png(ctx->r3d, "ui/joystick_circle_nub_c.png", &tw, &th);
+	log_info("[controls] joystick textures: pad=%p nub=%p", self->pad_tex, self->nub_tex);
+
+	// 右下操作键: 攻击/射击/射线
+	self->btn_attack = r3d_button_create(412, 254, 64, 64, "攻");   // 主攻击: 最靠右下角
+	self->btn_bullet = r3d_button_create(340, 254, 58, 58, "射");   // 射击: 攻左下方
+	self->btn_ray    = r3d_button_create(408, 176, 58, 58, "线");   // 射线(大招): 弧形顶端
 	return self;
 }
 
 void gameplay_controls_layer_handle_event(gameplay_controls_layer_p self, const void* ev)
 {
 	if (!self) return;
-	Context* ctx = self->ctx;
-	jr3d_p r3d = ctx->r3d;
 
 	jevent_callbacks_t cbs = {};
 	cbs.on_mousepressed = [](float x, float y, int btn, void* arg) {
@@ -175,52 +236,36 @@ void gameplay_controls_layer_handle_event(gameplay_controls_layer_p self, const 
 		Context* ctx = self->ctx;
 		jr3d_p r3d = ctx->r3d;
 		(void)btn;
-		if (self->btn_up    && r3d_button_is_pressed(r3d, self->btn_up, true, x, y))
-			ctx->current_input_mask |= INPUT_UP;
-		if (self->btn_down  && r3d_button_is_pressed(r3d, self->btn_down, true, x, y))
-			ctx->current_input_mask |= INPUT_DOWN;
-		if (self->btn_left  && r3d_button_is_pressed(r3d, self->btn_left, true, x, y))
-			ctx->current_input_mask |= INPUT_LEFT;
-		if (self->btn_right && r3d_button_is_pressed(r3d, self->btn_right, true, x, y))
-			ctx->current_input_mask |= INPUT_RIGHT;
-		// 攻击/射击：冷却未到时间则点击无效(不注册 pressedInside, 一气呵成松手也不触发)
+		// 攻击/射击/射线: 冷却未到则点击无效(不注册 pressedInside)
 		if (self->btn_attack) {
-			bool cool = local_cool_ratio(ctx, false) > 0.0f;
-			if (!cool) r3d_button_is_pressed(r3d, self->btn_attack, true, x, y);
+			if (local_cool_ratio(ctx, false) <= 0.0f)
+				r3d_button_is_pressed(r3d, self->btn_attack, true, x, y);
 		}
 		if (self->btn_bullet) {
-			bool cool = local_cool_ratio(ctx, true) > 0.0f;
-			if (!cool) r3d_button_is_pressed(r3d, self->btn_bullet, true, x, y);
+			if (local_cool_ratio(ctx, true) <= 0.0f)
+				r3d_button_is_pressed(r3d, self->btn_bullet, true, x, y);
 		}
-		// 射线：冷却未到时点击无效
 		if (self->btn_ray) {
 			if (local_ray_cooldown_ratio(ctx) <= 0.0f)
 				r3d_button_is_pressed(r3d, self->btn_ray, true, x, y);
 		}
+		// 左摇杆: 命中底座圆内则激活并立即更新方向
+		float lx = x, ly = y;
+		r3d_window_to_logical(r3d, x, y, &lx, &ly);
+		float dx = lx - JS_CX, dy = ly - JS_CY;
+		float rr = JS_R * 1.15f;
+		if (dx * dx + dy * dy <= rr * rr) {
+			self->js_active = true;
+			js_update(self, lx, ly);
+		}
 	};
+
 	cbs.on_mousereleased = [](float x, float y, int btn, void* arg) {
 		gameplay_controls_layer_p self = (gameplay_controls_layer_p)arg;
 		Context* ctx = self->ctx;
 		jr3d_p r3d = ctx->r3d;
 		(void)btn;
-		// 方向键：若该键此前被虚拟层按下，松开时清除对应位移位（只清自己按下的，避免误清键盘按住的位）
-		if (self->btn_up) {
-			if (self->btn_up->pressedInside) ctx->current_input_mask &= ~INPUT_UP;
-			r3d_button_release(r3d, self->btn_up, x, y);
-		}
-		if (self->btn_down) {
-			if (self->btn_down->pressedInside) ctx->current_input_mask &= ~INPUT_DOWN;
-			r3d_button_release(r3d, self->btn_down, x, y);
-		}
-		if (self->btn_left) {
-			if (self->btn_left->pressedInside) ctx->current_input_mask &= ~INPUT_LEFT;
-			r3d_button_release(r3d, self->btn_left, x, y);
-		}
-		if (self->btn_right) {
-			if (self->btn_right->pressedInside) ctx->current_input_mask &= ~INPUT_RIGHT;
-			r3d_button_release(r3d, self->btn_right, x, y);
-		}
-		// 攻击：完整点击（按下+松开均在按钮内）且非冷却才触发一次攻击
+		// 攻击：完整点击(按下+松开均在按钮内)且非冷却才触发一次
 		if (self->btn_attack) {
 			bool cool = local_cool_ratio(ctx, false) > 0.0f;
 			bool full_click = !cool && self->btn_attack->pressedInside &&
@@ -228,7 +273,6 @@ void gameplay_controls_layer_handle_event(gameplay_controls_layer_p self, const 
 			r3d_button_release(r3d, self->btn_attack, x, y);
 			if (full_click) ctx->attack_triggered = true;
 		}
-		// 射击：完整点击（按下+松开均在按钮内）且非冷却才触发一次射击（点按单发）
 		if (self->btn_bullet) {
 			bool cool = local_cool_ratio(ctx, true) > 0.0f;
 			bool full_click = !cool && self->btn_bullet->pressedInside &&
@@ -236,7 +280,6 @@ void gameplay_controls_layer_handle_event(gameplay_controls_layer_p self, const 
 			r3d_button_release(r3d, self->btn_bullet, x, y);
 			if (full_click) ctx->bullet_triggered = true;
 		}
-		// 射线：完整点击且非冷却才触发一次射线（hitscan 点按一发）
 		if (self->btn_ray) {
 			bool cool = local_ray_cooldown_ratio(ctx) > 0.0f;
 			bool full_click = !cool && self->btn_ray->pressedInside &&
@@ -244,18 +287,29 @@ void gameplay_controls_layer_handle_event(gameplay_controls_layer_p self, const 
 			r3d_button_release(r3d, self->btn_ray, x, y);
 			if (full_click) ctx->ray_triggered = true;
 		}
+		// 摇杆: 松开清四个方向位并回中(瞄准角在逻辑层锁存, 仍可朝最后方向开火)
+		if (self->js_active) {
+			self->js_active = false;
+			ctx->current_input_mask &= ~(INPUT_UP | INPUT_DOWN | INPUT_LEFT | INPUT_RIGHT);
+			self->nub_dx = 0.0f;
+			self->nub_dy = 0.0f;
+		}
 	};
+
 	cbs.on_mousemoved = [](float x, float y, float dx, float dy, void* arg) {
 		gameplay_controls_layer_p self = (gameplay_controls_layer_p)arg;
-		jr3d_p r3d = self->ctx->r3d;
+		Context* ctx = self->ctx;
+		jr3d_p r3d = ctx->r3d;
 		(void)dx; (void)dy;
-		if (self->btn_up)    r3d_button_is_pressed(r3d, self->btn_up, false, x, y);
-		if (self->btn_down)  r3d_button_is_pressed(r3d, self->btn_down, false, x, y);
-		if (self->btn_left)  r3d_button_is_pressed(r3d, self->btn_left, false, x, y);
-		if (self->btn_right) r3d_button_is_pressed(r3d, self->btn_right, false, x, y);
 		if (self->btn_attack) r3d_button_is_pressed(r3d, self->btn_attack, false, x, y);
 		if (self->btn_bullet) r3d_button_is_pressed(r3d, self->btn_bullet, false, x, y);
 		if (self->btn_ray)    r3d_button_is_pressed(r3d, self->btn_ray,    false, x, y);
+		// 拖动摇杆时实时更新方向
+		if (self->js_active) {
+			float lx = x, ly = y;
+			r3d_window_to_logical(r3d, x, y, &lx, &ly);
+			js_update(self, lx, ly);
+		}
 	};
 	dispatch_event(cbs, ev, self);
 }
@@ -264,40 +318,67 @@ void gameplay_controls_layer_render(gameplay_controls_layer_p self)
 {
 	if (!self || !self->ctx || !self->ctx->r3d) return;
 	Context* ctx = self->ctx;
+	jr3d_p r3d = ctx->r3d;
 	render_mesh_p m = ctx->ui_quad;
 	if (!m) return;
-	// 逻辑坐标 480x320（与 main_menu 一致），白底黑框黑字配色由 r3d_button_draw 自带
-	r3d_button_draw_circle(ctx->r3d, m, self->btn_up, 480.0f, 320.0f);
-	r3d_button_draw_circle(ctx->r3d, m, self->btn_down, 480.0f, 320.0f);
-	r3d_button_draw_circle(ctx->r3d, m, self->btn_left, 480.0f, 320.0f);
-	r3d_button_draw_circle(ctx->r3d, m, self->btn_right, 480.0f, 320.0f);
-	r3d_button_draw_circle(ctx->r3d, m, self->btn_attack, 480.0f, 320.0f);  // 攻击键为圆形
-	r3d_button_draw_circle(ctx->r3d, m, self->btn_bullet, 480.0f, 320.0f);  // 射击键为圆形
-	r3d_button_draw_circle(ctx->r3d, m, self->btn_ray, 480.0f, 320.0f);     // 射线键为圆形
-	// 冷却未到时：攻击/射击按钮不可点击, 并画圆形冷却进度环
+
+	// 键盘同步到摇杆圆钮(未拖拽时, 纯显示): 按 WASD 时圆钮偏向对应方向
+	if (!self->js_active) {
+		int kb = ctx->current_input_mask;
+		float kx = 0.0f, ky = 0.0f;
+		if (kb & INPUT_RIGHT) kx += 1.0f;
+		if (kb & INPUT_LEFT)  kx -= 1.0f;
+		if (kb & INPUT_DOWN)  ky += 1.0f;
+		if (kb & INPUT_UP)    ky -= 1.0f;
+		self->nub_dx = kx * JS_R * 0.55f;
+		self->nub_dy = ky * JS_R * 0.55f;
+	}
+
+	// 摇杆底座(贴图; 缺纹理退化为圆盘)
+	if (self->pad_tex) {
+		r3d_draw_tex_2d(r3d, m, JS_CX - JS_R, JS_CY - JS_R, JS_R * 2.0f, JS_R * 2.0f,
+						self->pad_tex, 480.0f, 320.0f);
+	} else {
+		render_mesh_p d = get_js_disc(ctx);
+		if (d) r3d_draw_mesh_2d(r3d, d, JS_CX, JS_CY, JS_R * 2.0f, JS_R * 2.0f,
+								235, 233, 226, 480.0f, 320.0f);
+	}
+	// 摇杆圆钮(跟随偏移)
+	{
+		float nx = JS_CX + self->nub_dx;
+		float ny = JS_CY + self->nub_dy;
+		if (self->nub_tex) {
+			r3d_draw_tex_2d(r3d, m, nx - JS_NUB_R, ny - JS_NUB_R,
+							JS_NUB_R * 2.0f, JS_NUB_R * 2.0f, self->nub_tex, 480.0f, 320.0f);
+		} else {
+			render_mesh_p d = get_js_disc(ctx);
+			if (d) r3d_draw_mesh_2d(r3d, d, nx, ny, JS_NUB_R * 2.0f, JS_NUB_R * 2.0f,
+									40, 40, 45, 480.0f, 320.0f);
+		}
+	}
+
+	// 右下操作键(圆形)
+	r3d_button_draw_circle(r3d, m, self->btn_attack, 480.0f, 320.0f);
+	r3d_button_draw_circle(r3d, m, self->btn_bullet, 480.0f, 320.0f);
+	r3d_button_draw_circle(r3d, m, self->btn_ray,    480.0f, 320.0f);
+	// 冷却环
 	draw_cool_ring(ctx, self->btn_attack, local_cool_tick(ctx, false), ActionStateComponent::MELEE_COOLDOWN);
 	draw_cool_ring(ctx, self->btn_bullet, local_cool_tick(ctx, true), ActionStateComponent::BULLET_COOLDOWN);
-	draw_cool_ring(ctx, self->btn_ray, local_cool_tick_ray(ctx), ActionStateComponent::RAY_COOLDOWN);
-	// 圆按钮右下角叠加键盘键角标（方案 A）：菜单大字为"攻/射"，角标小字提示对应按键 J/K
+	draw_cool_ring(ctx, self->btn_ray,    local_cool_tick_ray(ctx),  ActionStateComponent::RAY_COOLDOWN);
+	// 键角标
 	draw_key_corner(ctx, self->btn_attack, "J");
 	draw_key_corner(ctx, self->btn_bullet, "K");
-	draw_key_corner(ctx, self->btn_ray, "L");
-	// 方向键同样统一为圆形+角标：中心字母为 W/S/A/D，右下角叠同键位小字键帽
-	draw_key_corner(ctx, self->btn_up, "W");
-	draw_key_corner(ctx, self->btn_down, "S");
-	draw_key_corner(ctx, self->btn_left, "A");
-	draw_key_corner(ctx, self->btn_right, "D");
+	draw_key_corner(ctx, self->btn_ray,    "L");
 }
 
 void gameplay_controls_layer_destroy(gameplay_controls_layer_p self)
 {
 	if (!self) return;
-	if (self->btn_up)    r3d_button_destroy(self->btn_up);
-	if (self->btn_down)  r3d_button_destroy(self->btn_down);
-	if (self->btn_left)  r3d_button_destroy(self->btn_left);
-	if (self->btn_right) r3d_button_destroy(self->btn_right);
+	// 退出时清掉四个方向位, 避免残留
+	if (self->ctx)
+		self->ctx->current_input_mask &= ~(INPUT_UP | INPUT_DOWN | INPUT_LEFT | INPUT_RIGHT);
 	if (self->btn_attack) r3d_button_destroy(self->btn_attack);
 	if (self->btn_bullet) r3d_button_destroy(self->btn_bullet);
-	if (self->btn_ray) r3d_button_destroy(self->btn_ray);
+	if (self->btn_ray)    r3d_button_destroy(self->btn_ray);
 	free(self);
 }

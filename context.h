@@ -253,6 +253,10 @@ struct Context {
 	// 最近 1s 内推进的逻辑帧数（逻辑 FPS，固定步长约 20Hz），供 HUD 显示
 	int logic_fps = 0;
 
+	// 调试 HUD 开关（F1 切换，仿 joy_topdown_template 的 show_debug_hud）：
+	// 控制 Frame/LogicFPS/Enemies/EID 调试行是否显示，默认关闭。
+	bool show_debug_hud = false;
+
 	// 逻辑层 → 渲染层 借道缓冲：逻辑 system 把攻击挥击特效请求写入，渲染 pass 每帧消费并清空。
 	std::vector<AttackFlashRequest> attack_flashes;
 
