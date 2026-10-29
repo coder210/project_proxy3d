@@ -2,6 +2,8 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_gpu.h>
+#include <SDL3/SDL_vulkan.h>
 #include <joy/joy.h>
 #include <cstring>
 #include "context.h"
@@ -80,17 +82,47 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         window_set_fullscreen(ctx->window, true);
     }
 
+    // 诊断探针：
+    // 1) 先单独调用 SDL_Vulkan_LoadLibrary 抓 loader/WSI 层错误（缺 VK_KHR_android_surface / 设备无 Vulkan）；
+    // 2) 再调用 SDL_GPUSupportsProperties 抓实例/设备层错误（缺必需实例扩展）。
+    //    该函数不会覆盖 SDL_GetError，故能保留 PrepareDriver 内部的具体原因（无需 logcat 即可定位）。
+    char vk_diag[256] = { 0 };
+    if (!SDL_Vulkan_LoadLibrary(NULL)) {
+        SDL_strlcpy(vk_diag, SDL_GetError(), sizeof(vk_diag));
+    } else {
+        SDL_Vulkan_UnloadLibrary();
+        SDL_PropertiesID probe_props = SDL_CreateProperties();
+        if (probe_props) {
+            SDL_SetBooleanProperty(probe_props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true);
+            SDL_SetBooleanProperty(probe_props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_CLIP_DISTANCE_BOOLEAN, false);
+            SDL_SetBooleanProperty(probe_props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_DEPTH_CLAMPING_BOOLEAN, false);
+            SDL_SetBooleanProperty(probe_props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_INDIRECT_DRAW_FIRST_INSTANCE_BOOLEAN, false);
+            SDL_SetBooleanProperty(probe_props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_ANISOTROPY_BOOLEAN, false);
+            if (!SDL_GPUSupportsProperties(probe_props)) {
+                const char* e = SDL_GetError();
+                SDL_strlcpy(vk_diag, (e && *e) ? e : "(backend 不支持，但无具体错误串)", sizeof(vk_diag));
+            } else {
+                SDL_strlcpy(vk_diag, "(GPU backend 应通过；问题在 r3d_create 内部着色器/管线)", sizeof(vk_diag));
+            }
+            SDL_DestroyProperties(probe_props);
+        } else {
+            SDL_strlcpy(vk_diag, "(无法创建属性对象)", sizeof(vk_diag));
+        }
+    }
+
     // r3d 为进程级资源：所有模式统一创建一次（服务端也渲染场景、可返回主菜单）
     ctx->r3d = r3d_create(ctx->window, "shaders");
     if (!ctx->r3d) {
         log_error("r3d_create failed (GPU unavailable or shaders missing in shaders)");
         const char* sdlerr = SDL_GetError();
-        char msg[640];
+        char msg[768];
         SDL_snprintf(msg, sizeof(msg),
-            "r3d_create 失败。SDL 最后错误：\n%s\n\n"
-            "• 若含 \"Could not create GPU device\" / \"vkCreateInstance\" → 该设备 Vulkan 不可用或驱动不兼容；\n"
-            "• 若含 \"CreateGPUShader\" / \"SPIR-V\" → 着色器 SPIR-V 在该 Vulkan 驱动（Mali 等移动 GPU）编译失败。",
-            (sdlerr && *sdlerr) ? sdlerr : "(无错误信息)");
+            "r3d_create 失败。\n\nSDL 最后错误：\n%s\n\nVulkan 探针：\n%s\n\n"
+            "• 探针含 \"VK_KHR_android_surface\" → 驱动未实现安卓 surface 扩展（SDL_GPU 仅 Vulkan、无 OpenGL 回退，无法用）；\n"
+            "• 探针含 \"Required Vulkan instance extension\" → 缺必需实例扩展（如 VK_KHR_get_physical_device_properties2）；\n"
+            "• 探针含 \"Vulkan is not loaded\"/\"Could not load\" → 设备无可用 Vulkan；\n"
+            "• 探针显示 (Vulkan loaded OK)/(GPU backend 应通过) → 加载层正常，问题在着色器/管线创建，需进一步日志。",
+            (sdlerr && *sdlerr) ? sdlerr : "(无错误信息)", vk_diag);
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "无法启动 3D 渲染", msg, NULL);
         return SDL_APP_FAILURE;
     }
