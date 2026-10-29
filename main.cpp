@@ -2,6 +2,7 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_vulkan.h>
 #include <joy/joy.h>
@@ -72,6 +73,13 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     game_timer_init(&ctx->game_timer);
     game_timer_set_target_fps(&ctx->game_timer, 60);
 
+#if defined(__ANDROID__)
+    // 移动端固定横屏：必须在创建窗口前设置。SDL 创建窗口时会据此调 Android 的
+    // setRequestedOrientation()；若不设且窗口带 RESIZABLE 标志，Java 侧按 FULL_USER 处理，
+    // 会覆盖 AndroidManifest 里的 screenOrientation，导致仍可能竖屏。
+    // 指定两个横屏方向 → Java 侧取 USER_LANDSCAPE（仅横屏、可左右翻转）。
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#endif
     ctx->window = create_window("project_proxy3d", 480, 320);
 
     // 设置窗口图标（logo.png 位于 textures 目录下）
