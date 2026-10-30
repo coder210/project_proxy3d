@@ -19,12 +19,12 @@ static inline void ui_particles_init(ui_particles* p, int logical_w, int logical
 	for (int i = 0; i < UI_PARTICLES_MAX; i++) {
 		p->x[i] = (float)(rand() % logical_w);
 		p->y[i] = (float)(rand() % logical_h);
-		p->vx[i] = ((float)rand() / RAND_MAX - 0.5f) * 6.0f;
-		p->vy[i] = ((float)rand() / RAND_MAX - 0.5f) * 6.0f;
-		p->alpha[i] = 0.08f + (float)rand() / RAND_MAX * 0.15f;
-		p->size[i] = 1.5f + (float)rand() / RAND_MAX * 1.5f;
-		p->phase[i] = (float)rand() / RAND_MAX * 6.2832f;
-		p->twinkle[i] = 0.8f + (float)rand() / RAND_MAX * 1.5f;
+		p->vx[i] = ((float)rand() / (float)RAND_MAX - 0.5f) * 6.0f;
+		p->vy[i] = ((float)rand() / (float)RAND_MAX - 0.5f) * 6.0f;
+		p->alpha[i] = 0.08f + (float)rand() / (float)RAND_MAX * 0.15f;
+		p->size[i] = 1.5f + (float)rand() / (float)RAND_MAX * 1.5f;
+		p->phase[i] = (float)rand() / (float)RAND_MAX * 6.2832f;
+		p->twinkle[i] = 0.8f + (float)rand() / (float)RAND_MAX * 1.5f;
 	}
 }
 

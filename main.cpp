@@ -76,9 +76,9 @@ static void get_real_output_size(int* out_w, int* out_h) {
         SDL_Window* raw = (SDL_Window*)get_raw_window(ctx->window);
         if (raw) {
             SDL_DisplayID d = SDL_GetDisplayForWindow(raw);
-            SDL_DisplayMode m;
-            if (d && SDL_GetCurrentDisplayMode(d, &m) && m.w > 0 && m.h > 0) {
-                w = m.w; h = m.h;
+            const SDL_DisplayMode* m = (d ? SDL_GetCurrentDisplayMode(d) : NULL);
+            if (m && m->w > 0 && m->h > 0) {
+                w = m->w; h = m->h;
             }
         }
     }
