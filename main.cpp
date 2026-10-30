@@ -64,17 +64,43 @@ static void handle_transition_event(SDL_Event* e) {
      - 左右无留边，控件可由各 layer 锚定到屏幕真实边缘。
    每帧调用以自动处理旋转/全屏切换（仅逻辑宽变化时才重设）。 */
 static int g_ui_logical_w = 0;
+
+// 取真实输出尺寸(横屏游戏的宽高比来源)。
+// 注意：移动端启动阶段 SDL_GetWindowSize / GPU swapchain 常停留在窗口创建尺寸(480x320)，
+// 用它算出的自适应逻辑宽会卡在 480，导致 480x320 逻辑区在宽屏上被 letterbox 居中、左右出现
+// 大留边，摇杆被推离屏幕左缘(PC 上窗口本身即 480x320 故看不出)。故改以“当前显示模式”
+// 作宽高比来源——它稳定反映真实屏幕分辨率，不受创建尺寸/ swapchain 初始尺寸影响。
+static void get_real_output_size(int* out_w, int* out_h) {
+    int w = 0, h = 0;
+    if (ctx && ctx->window) {
+        SDL_Window* raw = (SDL_Window*)get_raw_window(ctx->window);
+        if (raw) {
+            SDL_DisplayID d = SDL_GetDisplayForWindow(raw);
+            SDL_DisplayMode m;
+            if (d && SDL_GetCurrentDisplayMode(d, &m) && m.w > 0 && m.h > 0) {
+                w = m.w; h = m.h;
+            }
+        }
+    }
+    if (w <= 0 || h <= 0) r3d_get_window_size(ctx->r3d, &w, &h);
+    if (w <= 0 || h <= 0) { w = 480; h = 320; }
+    if (out_w) *out_w = w;
+    if (out_h) *out_h = h;
+}
+
 static void apply_adaptive_logical_presentation(void) {
     if (!ctx || !ctx->r3d) return;
     int ow = 0, oh = 0;
-    r3d_get_window_size(ctx->r3d, &ow, &oh);
-    if (ow <= 0 || oh <= 0) { ow = 480; oh = 320; }   // 初始化/切后台瞬间兜底
+    get_real_output_size(&ow, &oh);
+    // 横屏游戏：以较大值为宽、较小值为高，消除竖/横屏显示模式报告方向差异
+    int pw = (ow >= oh) ? ow : oh;
+    int ph = (ow >= oh) ? oh : ow;
 
     const int design_h = 320;
     // 仅对战场景开启自适应宽度；其余场景固定 480（自动居中）
     int lw = 480;
     if (ctx->ui_adaptive_layout) {
-        lw = (int)((float)design_h * (float)ow / (float)oh + 0.5f);
+        lw = (int)((float)design_h * (float)pw / (float)ph + 0.5f);
         if (lw < 480)  lw = 480;    // 竖长窗口兜底
         if (lw > 1200) lw = 1200;   // 超宽窗口兜底
     }
