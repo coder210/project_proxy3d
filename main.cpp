@@ -22,15 +22,16 @@
 
 static Context* ctx;
 
-// --cs：走 C# 3D 瘦宿主路径（窗口/r3d/逻辑/渲染全在 JoyGame.dll）；
-// 不带时保持原 C++ 游戏路径不变。
-static bool g_cs_mode = false;
+// 默认走 C# 3D 瘦宿主路径（窗口/r3d/逻辑/场景全在 JoyGame.dll）；
+// --cpp 显式回退到原 C++ 游戏路径（保留作对照/回退）。
+static bool g_cs_mode = true;
 
 static bool parse_cs_flag(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--cpp") == 0) return false;
         if (strcmp(argv[i], "--cs") == 0) return true;
     }
-    return false;
+    return true; // 默认 C#
 }
 
 // 解析 --mode=single|host|client|server（默认 single）

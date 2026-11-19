@@ -44,6 +44,18 @@ bool cs_host_init(int argc, char* argv[])
 {
     if (!setup_clr_dirs()) return false;
 
+    const char* modeVal = NULL;
+    int mi = find_arg(argc, argv, "--mode");
+    if (mi >= 0 && mi + 1 < argc) modeVal = argv[mi + 1];
+    else for (int a = 1; a < argc; ++a)
+        if (std::strncmp(argv[a], "--mode=", 7) == 0) { modeVal = argv[a] + 7; break; }
+    if (modeVal) {
+#if defined(_WIN32)
+        _putenv_s("PROXY_MODE", modeVal);
+#else
+        setenv("PROXY_MODE", modeVal, 1);
+#endif
+    }
     int i = find_arg(argc, argv, "--smoke");
     if (i >= 0 && i + 1 < argc) s_smoke_frames = std::atoi(argv[i + 1]);
     if (s_smoke_frames > 0) {
