@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- project_proxy3d 的 C# 游戏逻辑程序集。
+       最终由 C++ 瘦宿主（joy cs 模块 / MonoVM）加载 JoyGame.dll 并调用
+       JoyGame.Host.OnInit / OnFrame / OnShutdown。
+       当前阶段：骨架 + 定点数 + GameState 雏形，尚未接入宿主的帧驱动。 -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>JoyGame</AssemblyName>
+    <RootNamespace>ProxyGame</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <JoyCSharpDir Condition="'$(JoyCSharpDir)' == ''">$(MSBuildProjectDirectory)/../third_party/joy/modules/cs</JoyCSharpDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- joy 的强类型绑定（含 JmathFp* 定点数 + R3dExt 手写 r3d 适配） -->
+    <ProjectReference Include="$(JoyCSharpDir)/Joy.Bindings.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="runtime\**\*.cs" />
+    <Compile Include="state\**\*.cs" />
+    <Compile Include="systems\**\*.cs" />
+  </ItemGroup>
+</Project>

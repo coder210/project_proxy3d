@@ -4,3 +4,8 @@ build*/
 CMakeLists.txt.user
 CMakeUserPresets.json
 compile_commands.json
+
+# .NET 构建产物（game_cs）
+game_cs/bin/
+game_cs/obj/
+game_cs/out/
