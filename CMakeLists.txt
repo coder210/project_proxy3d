@@ -143,15 +143,6 @@ if(MSVC)
     target_compile_options(${EXECUTABLE_NAME} PRIVATE /utf-8)
 endif()
 
-# 旧版 joy API → 新版兼容头：强制注入到所有源文件，零改动业务源码适配新版引擎
-set(JOY_COMPAT_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/compat/joy_compat.h")
-if(MSVC)
-    target_compile_options(${EXECUTABLE_NAME} PRIVATE "/FI${JOY_COMPAT_HEADER}")
-else()
-    target_compile_options(${EXECUTABLE_NAME} PRIVATE -include "${JOY_COMPAT_HEADER}")
-endif()
-target_sources(${EXECUTABLE_NAME} PRIVATE "${JOY_COMPAT_HEADER}")
-
 # Web 平台输出 HTML
 if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html" CACHE INTERNAL "")
