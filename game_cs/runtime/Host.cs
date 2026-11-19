@@ -23,8 +23,8 @@ namespace JoyGame
 
         public static void OnInit(int width, int height, int smokeFrames)
         {
-            // 对照模式：由 PARITY 环境变量触发，输出状态快照后让宿主退出。
-            // 与 bench/parity/parity.cpp 用同场景同输入，供 diff 逐位一致性。
+            // 快照模式：由 PROXY_PARITY 环境变量触发，输出确定场景的状态快照后让宿主退出。
+            // 供回归/自检使用，与已移除的 C++ parity 基准保持同格式。
             if (Environment.GetEnvironmentVariable("PROXY_PARITY") == "1")
             {
                 Parity.Run();

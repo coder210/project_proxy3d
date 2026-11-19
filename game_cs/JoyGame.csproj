@@ -18,8 +18,9 @@
     <ProjectReference Include="$(JoyCSharpDir)/Joy.Bindings.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- 目录布局对齐 joy examples/csharp：runtime=宿主/骨架，game=玩法，test=验证脚本 -->
     <Compile Include="runtime\**\*.cs" />
-    <Compile Include="state\**\*.cs" />
-    <Compile Include="systems\**\*.cs" />
+    <Compile Include="game\**\*.cs" />
+    <Compile Include="test\**\*.cs" />
   </ItemGroup>
 </Project>

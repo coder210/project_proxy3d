@@ -4,9 +4,9 @@ using ProxyGame;
 namespace JoyGame
 {
     /// <summary>
-    /// 帧同步对照快照（C# 侧）。由 Host.OnInit 在 PROXY_PARITY=1 时触发。
-    /// 构造与 bench/parity/parity.cpp 完全相同的场景与输入序列，跑 30 tick，
-    /// 按同样格式打印玩家状态（fp 原始 long），供与 C++ 快照 diff 逐位一致性。
+    /// 帧同步快照自检（C# 侧）。由 Host.OnInit 在 PROXY_PARITY=1 时触发。
+    /// 构造确定场景与输入序列，跑 30 tick，按固定格式打印玩家状态（fp 原始 long），
+    /// 供回归比对。原 C++/C# 逐位对照基准已移除，本脚本保留为独立快照自检。
     /// </summary>
     public static class Parity
     {
