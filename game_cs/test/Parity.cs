@@ -1,5 +1,6 @@
 using System;
 using ProxyGame;
+using Joy.Api;
 
 namespace JoyGame
 {
@@ -14,6 +15,11 @@ namespace JoyGame
 
         public static void Run()
         {
+            // r3d 绑定自检：确认 7 个手写 InternalCall（含新补的 R3dCreate）已注册且空句柄安全
+            string r3dDetail;
+            bool r3dOk = R3dExt.SelfTest(out r3dDetail);
+            Joy.Host.log("[r3dselftest] " + (r3dOk ? "PASS " : "FAIL ") + r3dDetail);
+
             // 地图解析对照：与 C++ harness 的 parity_maps 同格式
             for (int lv = 1; lv <= MapTables.LevelCount; ++lv) {
                 var ll = MapData.BuildLayout(lv);
