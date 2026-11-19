@@ -155,22 +155,6 @@ if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html" CACHE INTERNAL "")
 endif()
 
-# ---------- Headless 逻辑系统性能基准（独立 target，不进入主 GLOB） ----------
-option(BUILD_BENCH_LOGIC "Build headless logic-system benchmark (bench_logic)" OFF)
-if(BUILD_BENCH_LOGIC)
-    add_executable(bench_logic bench/bench_logic.cpp)
-    include(${JOY_ADD_CMAKE})
-    joy_add_sources(bench_logic)
-    target_include_directories(bench_logic PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/shared")
-    if(MSVC)
-        target_compile_options(bench_logic PRIVATE /utf-8)
-    endif()
-    # 共享系统头文件使用内联变量/结构化绑定等 C++17 特性
-    target_compile_features(bench_logic PRIVATE cxx_std_17)
-endif()
-
 # 引入 joy 框架源码（纯文件引入，不再构建独立库 target）
 include(${JOY_ADD_CMAKE})
 joy_add_sources(${EXECUTABLE_NAME})
