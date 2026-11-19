@@ -33,7 +33,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 # 引擎路径：独立仓库用 third_party/joy，单仓用 <根>/joy
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/joy/joy/joy_add.cmake")
+# 新版 joy 的 joy_add.cmake 在仓库根；旧版在 joy/ 子目录。两种布局都兼容。
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/joy/joy_add.cmake")
+    set(JOY_ADD_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/joy/joy_add.cmake")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/joy/joy/joy_add.cmake")
     set(JOY_ADD_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/joy/joy/joy_add.cmake")
 else()
     set(JOY_ADD_CMAKE "${CMAKE_SOURCE_DIR}/joy/joy_add.cmake")
@@ -91,6 +94,15 @@ set_target_properties(${EXECUTABLE_NAME} PROPERTIES
 if(MSVC)
     target_compile_options(${EXECUTABLE_NAME} PRIVATE /utf-8)
 endif()
+
+# 旧版 joy API → 新版兼容头：强制注入到所有源文件，零改动业务源码适配新版引擎
+set(JOY_COMPAT_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/compat/joy_compat.h")
+if(MSVC)
+    target_compile_options(${EXECUTABLE_NAME} PRIVATE "/FI${JOY_COMPAT_HEADER}")
+else()
+    target_compile_options(${EXECUTABLE_NAME} PRIVATE -include "${JOY_COMPAT_HEADER}")
+endif()
+target_sources(${EXECUTABLE_NAME} PRIVATE "${JOY_COMPAT_HEADER}")
 
 # Web 平台输出 HTML
 if(EMSCRIPTEN)

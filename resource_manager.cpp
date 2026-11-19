@@ -1,5 +1,6 @@
 #include "resource_manager.h"
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_iostream.h>   // SDL_LoadFile 在 SDL3 中归属此头
 #include <cstdio>
 #include <cstring>
 
