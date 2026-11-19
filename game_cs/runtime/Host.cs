@@ -10,21 +10,23 @@ namespace JoyGame
     ///   OnInit(int width, int height, int smokeFrames)
     ///   OnFrame(float dt)
     ///   OnShutdown()
-    /// 当前骨架：只维护 GameState 与固定步累加器，不建渲染（r3d 由宿主持有后借用，
-    /// 渲染 pass 迁移阶段再接）。逻辑 tick 固定 1/20 秒，与 C++ 原 FIXED_TIMESTEP 一致。
+    ///
+    /// 三条路径：
+    ///  - PROXY_PARITY=1：快照自检（回归用），不建窗口/渲染。
+    ///  - smokeFrames>0：headless 冒烟，只驱动逻辑 tick，不建 GPU 上下文。
+    ///  - 正常：GameApp3D 自建窗口 + r3d，C# 全权驱动逻辑与 3D 渲染。
     /// </summary>
     public static class Host
     {
         public const float FixedDt = 1.0f / 20.0f;
 
-        private static GameState _state;
+        private static GameApp3D _app;
+        private static GameState _smokeState;
         private static float _accumulator;
         private static int _frame;
 
         public static void OnInit(int width, int height, int smokeFrames)
         {
-            // 快照模式：由 PROXY_PARITY 环境变量触发，输出确定场景的状态快照后让宿主退出。
-            // 供回归/自检使用，与已移除的 C++ parity 基准保持同格式。
             if (Environment.GetEnvironmentVariable("PROXY_PARITY") == "1")
             {
                 Parity.Run();
@@ -33,43 +35,46 @@ namespace JoyGame
                 return;
             }
 
-            _state = new GameState();
-            _accumulator = 0f;
-            _frame = 0;
-            Joy.Host.log("[proxy.cs] init " + width + "x" + height
-                       + (smokeFrames > 0 ? " smoke=" + smokeFrames : ""));
+            if (smokeFrames > 0)
+            {
+                // headless 冒烟：不建窗口/r3d，只跑确定性逻辑，验证无异常。
+                _smokeState = new GameState();
+                _accumulator = 0f;
+                _frame = 0;
+                Joy.Host.log("[proxy.cs] smoke init " + smokeFrames + " frames (logic-only)");
+                return;
+            }
+
+            _app = new GameApp3D(width, height);
+            _app.Start();
+            Joy.Host.log("[proxy.cs] 3D init " + width + "x" + height);
         }
 
         public static void OnFrame(float dt)
         {
-            if (_state == null) return;
+            if (_app != null) { _app.Tick(dt); _frame++; return; }
+            if (_smokeState == null) return;
             if (dt < 0f) dt = 0f;
             if (dt > 0.1f) dt = 0.1f;
-
             _accumulator += dt;
             while (_accumulator >= FixedDt)
             {
-                Tick(FixedDt);
+                SmokeTick(FixedDt);
                 _accumulator -= FixedDt;
             }
         }
 
-        private static void Tick(float dt)
+        private static void SmokeTick(float dt)
         {
-            _state.Frame++;
+            _smokeState.Frame++;
             _frame++;
-            // 系统按 C++ 的相对顺序逐个迁入：
-            // PreUpdate: join → leave → input（消费网络命令；C++ 在 game_scene 注册）
-            // OnUpdate: ai → pathfinding → melee_attack → bullet → player_death → wave → wave_spawn
-            // → movement → knockback → collision → cleanup
-            ProxyGame.Systems.InputConsumeJoinSystem.Update(_state);
-            ProxyGame.Systems.InputConsumeLeaveSystem.Update(_state);
-            ProxyGame.Systems.InputConsumeInputSystem.Update(_state);
-            ProxyGame.Systems.PlayerDeathSystem.Update(_state);
-            ProxyGame.Systems.MovementSystem.Update(_state);
-            ProxyGame.Systems.KnockbackSystem.Update(_state);
-            // 帧尾清输入（C++ cleanup_system，最后执行）
-            ProxyGame.Systems.CleanupSystem.Update(_state);
+            ProxyGame.Systems.InputConsumeJoinSystem.Update(_smokeState);
+            ProxyGame.Systems.InputConsumeLeaveSystem.Update(_smokeState);
+            ProxyGame.Systems.InputConsumeInputSystem.Update(_smokeState);
+            ProxyGame.Systems.PlayerDeathSystem.Update(_smokeState);
+            ProxyGame.Systems.MovementSystem.Update(_smokeState);
+            ProxyGame.Systems.KnockbackSystem.Update(_smokeState);
+            ProxyGame.Systems.CleanupSystem.Update(_smokeState);
         }
 
         public static void OnShutdown()
@@ -77,7 +82,6 @@ namespace JoyGame
             Joy.Host.log("[proxy.cs] shutdown frames=" + _frame);
         }
 
-        /// <summary>供冒烟/测试读取内部状态（只读快照）。</summary>
         public static int Frame => _frame;
     }
 }

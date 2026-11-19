@@ -18,8 +18,20 @@
 #include "scenes/game_scene.h"
 #include "scenes/victory_scene.h"
 #include "resource_manager.h"
+#include "cs_host.h"
 
 static Context* ctx;
+
+// --cs：走 C# 3D 瘦宿主路径（窗口/r3d/逻辑/渲染全在 JoyGame.dll）；
+// 不带时保持原 C++ 游戏路径不变。
+static bool g_cs_mode = false;
+
+static bool parse_cs_flag(int argc, char* argv[]) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--cs") == 0) return true;
+    }
+    return false;
+}
 
 // 解析 --mode=single|host|client|server（默认 single）
 static GameMode parse_mode(int argc, char* argv[]) {
@@ -113,6 +125,13 @@ static void apply_adaptive_logical_presentation(void) {
 
 extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     (void)appstate;
+
+    g_cs_mode = parse_cs_flag(argc, argv);
+    if (g_cs_mode) {
+        // C# 3D 路径：瘦宿主自建 MonoVM 并加载 JoyGame.dll；窗口/r3d 由 C# 创建。
+        return cs_host_init(argc, argv) ? SDL_APP_CONTINUE : SDL_APP_FAILURE;
+    }
+
     sys_init_netenv();
 
     if (!init_env()) {
@@ -220,6 +239,7 @@ extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 
 extern "C" SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* e) {
     (void)appstate;
+    if (g_cs_mode) return cs_host_event(e);
     if (should_close(e)) return SDL_APP_SUCCESS;
 
     // 独立服务端：只响应退出（不处理菜单/场景切换按键），但允许 ESC 返回主场景，
@@ -334,6 +354,8 @@ extern "C" SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* e) {
 }
 
 extern "C" SDL_AppResult SDL_AppIterate(void*) {
+    if (g_cs_mode) return cs_host_iterate();
+
     // 每帧刷新自适应逻辑分辨率（处理旋转/全屏切换导致的屏幕宽高比变化）
     apply_adaptive_logical_presentation();
     game_timer_update(&ctx->game_timer);
@@ -346,6 +368,7 @@ extern "C" SDL_AppResult SDL_AppIterate(void*) {
 extern "C" void SDL_AppQuit(void* appstate, SDL_AppResult result) {
     (void)appstate;
     (void)result;
+    if (g_cs_mode) { cs_host_quit(); return; }
     delete ctx->scene_mgr;
     settings_save(&ctx->settings);
     if (ctx->r3d) {
