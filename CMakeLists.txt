@@ -105,7 +105,9 @@ else()
     # 已根治，无需再把 exe 塞进同名子目录。
 endif()
 
-file(GLOB SRC_FILES CONFIGURE_DEPENDS "*.h"  "*.c" "*.hpp" "*.cpp" "scenes/*.h" "scenes/*.cpp" "layers/*.h" "layers/*.cpp" "systems/*.h" "systems/*.cpp" "passes/*.h" "passes/*.cpp" "components/*.h" "components/*.cpp" "network/*.h" "network/*.cpp" "*.h" "shared/*.h" "shared/components/*.h" "shared/systems/*.h")
+# 游戏逻辑/场景/渲染已全部迁移到 C#（game_cs/），本 target 只保留瘦宿主：
+# main.cpp / cs_host.cpp / cs_host.h + compat 兼容头（引擎源码由 joy_add_sources 引入）。
+file(GLOB SRC_FILES CONFIGURE_DEPENDS "*.h" "*.c" "*.hpp" "*.cpp")
 
 # 合并所有源文件
 set(PROJECT_FILES
@@ -159,8 +161,7 @@ endif()
 include(${JOY_ADD_CMAKE})
 joy_add_sources(${EXECUTABLE_NAME})
 
-# 添加 shared 共享目录 和 project_proxy3d 自身目录
-target_include_directories(${EXECUTABLE_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/shared")
+# project_proxy3d 自身目录（main.cpp / cs_host.cpp 使用）
 target_include_directories(${EXECUTABLE_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # ------------------- 资产处理 -------------------
