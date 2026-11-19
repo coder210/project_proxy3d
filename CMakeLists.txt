@@ -126,10 +126,10 @@ if(WIN32)
     target_sources(${EXECUTABLE_NAME} PRIVATE app_icon.rc)
 endif()
 
-# Apple 平台额外图标
+# Apple 平台额外图标：根目录 logo.png 已移入 assets/，
+# 由下方 add_resource 打包进 bundle 的 Resources 根（文件名仍为 logo.png）。
 if(APPLE)
     add_definitions(-DLUA_USE_IOS)
-    target_sources(${EXECUTABLE_NAME} PRIVATE logo.png)
 endif()
 
 # 设置语言标准
@@ -233,9 +233,10 @@ else()
 endif()
 
 # ------------------- 平台特定属性 -------------------
-set(RESOURCE_FILES "logo.png")
+# logo.png 已移入 assets/ 并由 add_resource 打包，storyboard 仍在根目录。
+set(RESOURCE_FILES "")
 if(IOS)
-    set(RESOURCE_FILES "iosLaunchScreen.storyboard;logo.png")
+    set(RESOURCE_FILES "iosLaunchScreen.storyboard")
 endif()
 
 set_target_properties(${EXECUTABLE_NAME} PROPERTIES
