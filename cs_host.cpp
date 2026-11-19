@@ -40,9 +40,35 @@ static bool setup_clr_dirs()
     return true;
 }
 
+/* 让 SDL3 的 Vulkan 后端发现随程序部署的 SwiftShader ICD。
+ * 三个文件由 CMake POST_BUILD 放到 exe 目录；这里从 argv[0] 取 exe 目录，
+ * 拼出 vk_swiftshader_icd.json 的绝对路径设进 VK_ICD_FILENAMES。 */
+static void setup_vulkan_dirs(const char* argv0)
+{
+    if (!argv0 || !*argv0) return;
+    const char* sep = NULL;
+    for (const char* p = argv0; *p; ++p)
+        if (*p == '/' || *p == '\\') sep = p;
+    if (!sep) return; // 经 PATH 启动，ICD 与 exe 同目录时 CWD 通常已是该目录
+    size_t n = (size_t)(sep - argv0);
+    if (n == 0 || n >= 1024) return;
+    char dir[1024], icd[1080];
+    std::memcpy(dir, argv0, n);
+    dir[n] = '\0';
+    std::snprintf(icd, sizeof(icd), "%s%cvk_swiftshader_icd.json", dir,
+                  (sep[0] == '\\' || sep[0] == '/') ? sep[0] : '/');
+#if defined(_WIN32)
+    _putenv_s("VK_ICD_FILENAMES", icd);
+#else
+    setenv("VK_ICD_FILENAMES", icd, 1);
+#endif
+    SDL_Log("[cs] VK_ICD_FILENAMES=%s", icd);
+}
+
 bool cs_host_init(int argc, char* argv[])
 {
     if (!setup_clr_dirs()) return false;
+    setup_vulkan_dirs(argc > 0 ? argv[0] : NULL);
 
     const char* modeVal = NULL;
     int mi = find_arg(argc, argv, "--mode");

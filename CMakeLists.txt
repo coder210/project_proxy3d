@@ -301,6 +301,19 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
                         "${_clr_bin}/coreclr.dll" "${_out_dir}/coreclr.dll"
                 COMMENT "Deploying coreclr.dll for ${EXECUTABLE_NAME}")
         endif()
+
+        # SwiftShader 软件 Vulkan：无独显环境让 SDL3 GPU 后端可用。
+        # 三个文件登记在 third_party/vulkan/，部署到 exe 旁；运行时还需设置
+        # VK_ICD_FILENAMES 指向 exe 目录的 vk_swiftshader_icd.json（见 cs_host.cpp）。
+        set(_vk_src "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan")
+        if(WIN32 AND EXISTS "${_vk_src}/vulkan-1.dll")
+            foreach(_vk_file vulkan-1.dll vk_swiftshader.dll vk_swiftshader_icd.json)
+                add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${_vk_src}/${_vk_file}" "${_out_dir}/${_vk_file}"
+                    COMMENT "Deploying SwiftShader Vulkan (${_vk_file})")
+            endforeach()
+        endif()
     else()
         message(WARNING "project_proxy3d: 缺平台 BCL (${_clr_libs}/System.Private.CoreLib.dll)，跳过 C# 运行时部署")
     endif()
