@@ -42,6 +42,52 @@ else()
     set(JOY_ADD_CMAKE "${CMAKE_SOURCE_DIR}/joy/joy_add.cmake")
 endif()
 
+# ---------- 启用 joy 的 C# 脚本模块（与 examples/csharp_host 同构） ----------
+# 必须在 include(JoyTargets.cmake) 之前设置全局属性：joy_add_sources() 内部
+# include JoyTargets，模块在那一步读 JOY_REQUESTED_MODULES 决定编真胶水还是空桩。
+# 本项目不走 joy 主 CMake（那段的 CLR 探测只在 JOY_BUILD_EXAMPLES=ON 时执行），
+# 故在这里独立完成 CLR 探测。
+if(NOT EMSCRIPTEN)
+    set(JOY_CLR_ROOT "${JOY_REPO_DIR}/runtimes")
+    if(NOT JOY_CLR_PLATFORM)
+        if(WIN32)
+            set(JOY_CLR_PLATFORM "windows-x64")
+        elseif(ANDROID)
+            set(JOY_CLR_PLATFORM "android-${ANDROID_ABI}")
+        elseif(APPLE)
+            set(JOY_CLR_PLATFORM "macos-arm64")
+        else()
+            set(JOY_CLR_PLATFORM "linux-x64")
+        endif()
+    endif()
+    set(_clr_plat "${JOY_CLR_ROOT}/${JOY_CLR_PLATFORM}")
+    if(NOT MONO_INCLUDE_DIR)
+        if(EXISTS "${JOY_CLR_ROOT}/include/mono-2.0")
+            set(MONO_INCLUDE_DIR "${JOY_CLR_ROOT}/include/mono-2.0")
+        elseif(EXISTS "${_clr_plat}/include/mono-2.0")
+            set(MONO_INCLUDE_DIR "${_clr_plat}/include/mono-2.0")
+        endif()
+    endif()
+    if(NOT MONO_LIBRARIES)
+        if(WIN32 AND EXISTS "${_clr_plat}/coreclr.import.lib")
+            set(MONO_LIBRARIES "${_clr_plat}/coreclr.import.lib")
+        elseif(EXISTS "${_clr_plat}/libcoreclr.so")
+            set(MONO_LIBRARIES "${_clr_plat}/libcoreclr.so")
+        elseif(EXISTS "${_clr_plat}/libcoreclr.dylib")
+            set(MONO_LIBRARIES "${_clr_plat}/libcoreclr.dylib")
+        endif()
+    endif()
+    if(MONO_INCLUDE_DIR AND MONO_LIBRARIES)
+        set(JOY_MODULE_CS ON CACHE BOOL "C# 脚本模块" FORCE)
+        set_property(GLOBAL PROPERTY JOY_REQUESTED_MODULES cs)
+        message(STATUS "project_proxy3d: 启用 joy C# 模块 (${JOY_CLR_PLATFORM})")
+    else()
+        message(WARNING
+            "project_proxy3d: 未找到 CLR 开发包，C# 模块跳过（只编空桩）。"
+            " 请设 -DMONO_INCLUDE_DIR 与 -DMONO_LIBRARIES")
+    endif()
+endif()
+
 # 可执行文件名
 set(EXECUTABLE_NAME "project_proxy3d")
 message(STATUS "EXECUTABLE_NAME = '${EXECUTABLE_NAME}'")
@@ -216,6 +262,65 @@ set_target_properties(${EXECUTABLE_NAME} PROPERTIES
     XCODE_ATTRIBUTE_CURRENTYEAR "${CURRENTYEAR}"
     RESOURCE "${RESOURCE_FILES}"
 )
+
+# ------------------- C# 脚本模块：构建与运行时部署（同 examples/csharp_host） -------------------
+# 仅当 C# 模块真正启用（CLR 探测成功、joy::all 含真胶水而非空桩）时才构建/部署。
+if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
+    # IDE 里按 joy 真实目录树分组注入的引擎源码（source_group 只在当前目录生效）
+    joy_ide_source_groups()
+
+    set(_cs_proj "${CMAKE_CURRENT_SOURCE_DIR}/game_cs/JoyGame.csproj")
+    set(_cs_out  "${CMAKE_BINARY_DIR}/csharp")
+
+    # 干净 checkout 没有 obj/：命令行 MSBuild 不隐式 restore，显式还原并串进依赖链。
+    add_custom_target(project_proxy3d_cs_restore
+        COMMAND dotnet restore "${_cs_proj}"
+        COMMENT "dotnet restore game_cs (+ Joy.Bindings)"
+        VERBATIM)
+    add_custom_target(project_proxy3d_cs_managed
+        COMMAND dotnet build "${_cs_proj}" -c $<IF:$<CONFIG:Debug>,Debug,Release> -o "${_cs_out}"
+        BYPRODUCTS
+            "${_cs_out}/JoyGame.dll"
+            "${_cs_out}/Joy.Bindings.dll"
+        COMMENT "dotnet build game_cs -> JoyGame.dll"
+        VERBATIM)
+    add_dependencies(project_proxy3d_cs_managed project_proxy3d_cs_restore)
+    add_dependencies(${EXECUTABLE_NAME} project_proxy3d_cs_managed)
+
+    # VS 解决方案挂入两个 C# 工程（否则 IDE 里看不到 .cs，且 NuGet restore 缺引用项目信息
+    # 会报 NU1105）。三个构建点串成链，避免 VS 与 dotnet build 同时写 obj/。
+    if(CMAKE_GENERATOR MATCHES "Visual Studio")
+        include_external_msproject(JoyBindings "${JOY_BINDINGS_CSPROJ}" PLATFORM "Any CPU")
+        include_external_msproject(JoyGame "${_cs_proj}" PLATFORM "Any CPU")
+        add_dependencies(JoyBindings project_proxy3d_cs_restore)
+        add_dependencies(JoyGame JoyBindings)
+        add_dependencies(project_proxy3d_cs_managed JoyGame)
+    endif()
+
+    # 运行期部署：JoyGame.dll 放 exe 旁；BCL + Joy.Bindings.dll 放 lib/（CLR 宿主只从
+    # MONO_LIB_DIR 指向的 lib 解析依赖）；coreclr.dll 由系统加载器从 exe 旁查找。
+    get_filename_component(_clr_bin "${MONO_LIBRARIES}" DIRECTORY)
+    set(_clr_libs "${_clr_bin}/libs")
+    if(EXISTS "${_clr_libs}/System.Private.CoreLib.dll")
+        set(_out_dir "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>")
+        add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_cs_out}/JoyGame.dll" "${_out_dir}/JoyGame.dll"
+            COMMAND ${CMAKE_COMMAND} -E remove_directory "${_out_dir}/lib"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${_clr_libs}" "${_out_dir}/lib"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_cs_out}/Joy.Bindings.dll" "${_out_dir}/lib/Joy.Bindings.dll"
+            COMMENT "Deploying C# runtime (JoyGame.dll + lib/)")
+        if(EXISTS "${_clr_bin}/coreclr.dll")
+            add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_clr_bin}/coreclr.dll" "${_out_dir}/coreclr.dll"
+                COMMENT "Deploying coreclr.dll for ${EXECUTABLE_NAME}")
+        endif()
+    else()
+        message(WARNING "project_proxy3d: 缺平台 BCL (${_clr_libs}/System.Private.CoreLib.dll)，跳过 C# 运行时部署")
+    endif()
+endif()
 if(MSVC)
     set_target_properties(${EXECUTABLE_NAME} PROPERTIES
         VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>"
