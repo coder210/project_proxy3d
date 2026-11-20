@@ -50,9 +50,9 @@ jobs:
           task copyIcons {
               doLast {
                   def densities = ['hdpi', 'mdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']
-                  def sourceFile = file('../../../../../logo.png')
+                  def sourceFile = file('../../../../../assets/logo.png')
                   if (!sourceFile.exists()) {
-                      throw new GradleException("logo.png not found at ${sourceFile.absolutePath}")
+                      throw new GradleException("assets/logo.png not found at ${sourceFile.absolutePath}")
                   }
                   densities.each { density ->
                       def targetDir = file("src/main/res/mipmap-${density}")
