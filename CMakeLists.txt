@@ -118,12 +118,12 @@ set(PROJECT_FILES
 target_sources(${EXECUTABLE_NAME}
     PRIVATE
         ${PROJECT_FILES}
-        native/iosLaunchScreen.storyboard
+        platform/iosLaunchScreen.storyboard
 )
 
 # Windows 平台嵌入 .exe 图标
 if(WIN32)
-    target_sources(${EXECUTABLE_NAME} PRIVATE native/app_icon.rc)
+    target_sources(${EXECUTABLE_NAME} PRIVATE platform/app_icon.rc)
 endif()
 
 # Apple 平台额外图标：根目录 logo.png 已移入 assets/，
@@ -225,15 +225,15 @@ else()
 endif()
 
 # ------------------- 平台特定属性 -------------------
-# logo.png 已移入 assets/ 并由 add_resource 打包，storyboard 在 native/。
+# logo.png 已移入 assets/ 并由 add_resource 打包，storyboard 在 platform/。
 set(RESOURCE_FILES "")
 if(IOS)
-    set(RESOURCE_FILES "native/iosLaunchScreen.storyboard")
+    set(RESOURCE_FILES "platform/iosLaunchScreen.storyboard")
 endif()
 
 set_target_properties(${EXECUTABLE_NAME} PROPERTIES
     MACOSX_BUNDLE TRUE
-    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/native/Info.plist.in"
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/platform/Info.plist.in"
     XCODE_GENERATE_SCHEME TRUE
     XCODE_ATTRIBUTE_BUNDLE_IDENTIFIER "com.game.${PROJECT_NAME}"
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.game.${PROJECT_NAME}"
