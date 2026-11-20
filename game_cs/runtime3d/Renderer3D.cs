@@ -43,7 +43,7 @@ namespace JoyGame
             _meshSphere = Bindings.R3dMeshSphere(r, 0.5f, 12, 8);
             _meshQuad = Bindings.R3dMeshQuad(r);
 
-            Bindings.R3dFontInit(r, "assets/fonts/arial.ttf", 24);
+            Bindings.R3dFontInit(r, "assets/fonts/simhei.ttf", 24);
         }
 
         public void RenderFrame(GameState state, float dt)
