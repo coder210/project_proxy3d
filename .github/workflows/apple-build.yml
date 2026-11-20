@@ -11,7 +11,7 @@ on:
 jobs:
   build-mac:
     name: Build for Apple (${{ matrix.target == '' && 'macOS' || matrix.target }})
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
