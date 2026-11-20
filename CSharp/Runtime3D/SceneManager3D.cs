@@ -31,6 +31,11 @@ namespace JoyGame
         }
 
         public void Update(float dt) { if (_current != null) _current.Update(dt); }
+        public void FixedUpdate(float dt)
+        {
+            var fixedScene = _current as IFixedUpdateScene;
+            if (fixedScene != null) fixedScene.FixedUpdate(dt);
+        }
         public void Render() { if (_current != null) _current.Render(); }
         public void OnEvent(UserEvent e) { if (_current != null) _current.OnEvent(e); }
 

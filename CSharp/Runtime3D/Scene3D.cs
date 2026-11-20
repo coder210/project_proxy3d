@@ -27,6 +27,12 @@ namespace JoyGame
         void Destroy();
     }
 
+    /// <summary>需要 20Hz 固定步逻辑的场景实现此接口（Unity FixedUpdate 语义）。</summary>
+    public interface IFixedUpdateScene
+    {
+        void FixedUpdate(float dt);
+    }
+
     /// <summary>简化的用户事件（替代 SDL_Event 直达 UI）。UI 用轮询，场景间用此事件通信。</summary>
     public sealed class UserEvent
     {
@@ -61,6 +67,9 @@ namespace JoyGame
         public byte InputMask;
         public bool AttackTriggered, BulletTriggered, RayTriggered;
         public bool ShowDebugHud = false;
+
+        // 本帧真实渲染 dt（供相机平滑等表现层使用，逻辑仍走固定步）
+        public float RenderDt = 1f / 60f;
 
         public void LoadSettings()
         {

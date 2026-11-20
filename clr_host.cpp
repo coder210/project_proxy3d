@@ -152,9 +152,9 @@ bool clr_host_init(int argc, char* argv[])
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[cs] load assembly failed");
         return false;
     }
-    s_on_init = csx_find_method(s_csx, "JoyGame", "Host", "OnInit", 3);
-    s_on_frame = csx_find_method(s_csx, "JoyGame", "Host", "OnFrame", 1);
-    s_on_shutdown = csx_find_method(s_csx, "JoyGame", "Host", "OnShutdown", 0);
+    s_on_init = csx_find_method(s_csx, "JoyGame", "GameApplication", "Initialize", 3);
+    s_on_frame = csx_find_method(s_csx, "JoyGame", "GameApplication", "Update", 1);
+    s_on_shutdown = csx_find_method(s_csx, "JoyGame", "GameApplication", "Shutdown", 0);
     if (!s_on_init || !s_on_frame || !s_on_shutdown) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[cs] Host methods not found");
         return false;

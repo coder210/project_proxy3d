@@ -18,10 +18,10 @@ namespace JoyGame
         public int Frame { get; private set; }
 
         public GameApp3D(int width, int height) {
-            ResourceRoot.Align(); // 对齐资源根，使 assets/... 相对路径可用
+            // 资源根即当前目录，所有资源路径一律相对资源根
             Window = Bindings.CreateWindow("Project Proxy3D (C#)", width, height);
             if (Window == null) throw new InvalidOperationException("CreateWindow failed");
-            R3d = R3dExt.R3dCreate(Window, "assets/shaders");
+            R3d = R3dExt.R3dCreate(Window, "shaders");
             if (R3d == null) throw new InvalidOperationException("R3dCreate failed (GPU/shaders)");
             Bindings.R3dSetLogicalPresentationMode(R3d, width, height, 2);
 
@@ -51,6 +51,7 @@ namespace JoyGame
             if (dt < 0f) dt = 0f;
             if (dt > 0.1f) dt = 0.1f;
             Frame++;
+            Context.RenderDt = dt;
             Scenes.Update(dt);
             Scenes.Render();
         }

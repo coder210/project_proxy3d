@@ -9,18 +9,16 @@ namespace JoyGame
     /// 键盘 WASD/JKL 与暂停面板写输入掩码，胜利后切 VictoryScene。
     /// 网络 host/client/server 模式框架见 NetworkMode.cs（单机路径完整可用）。
     /// </summary>
-    internal sealed class BattleScene : IScene3D
+    internal sealed class BattleScene : IScene3D, IFixedUpdateScene
     {
         private readonly GameContext _ctx;
         private readonly Ui3D _ui;
         private readonly Renderer3D _renderer;
         private readonly NetworkMode _net;
-        private float _accumulator;
         private bool _victoryStarted;
         private float _victoryDelay;
         private bool _paused;
         private bool _prevEsc, _prevUp, _prevBullet, _prevRay;
-        private const float FixedDt = 1f / 20f;
 
         public string Name => "Battle";
         public BattleScene(GameContext ctx, Ui3D ui) {
@@ -30,7 +28,6 @@ namespace JoyGame
         }
 
         public void Enter() {
-            _accumulator = 0f;
             _victoryStarted = false;
             _victoryDelay = 0f;
             _paused = false;
@@ -66,12 +63,6 @@ namespace JoyGame
             if (_paused) return;
 
             CollectInput();
-
-            _accumulator += dt;
-            while (_accumulator >= FixedDt) {
-                LogicTick(FixedDt);
-                _accumulator -= FixedDt;
-            }
             _net.Update(dt);
 
             // 胜利检测（全部敌人肃清）
@@ -103,8 +94,14 @@ namespace JoyGame
             _net.CollectLocalInput();
         }
 
+        public void FixedUpdate(float dt) {
+            if (_paused) return;
+            LogicTick(dt);
+        }
+
         private void LogicTick(float dt) {
             var s = _ctx.State;
+            _renderer.Snapshot(s);
             s.Frame++;
             ProxyGame.Systems.InputConsumeJoinSystem.Update(s);
             ProxyGame.Systems.InputConsumeLeaveSystem.Update(s);
@@ -117,7 +114,10 @@ namespace JoyGame
         }
 
         public void Render() {
-            _renderer.RenderFrame(_ctx.State, 0.016f);
+            float alpha = GameApplication.FixedAlpha;
+            if (alpha < 0f) alpha = 0f;
+            if (alpha > 1f) alpha = 1f;
+            _renderer.RenderFrame(_ctx.State, _ctx.RenderDt, alpha);
             if (_paused) _ui.Text("[暂停] ESC 继续，返回主菜单请用暂停面板", 120, 8, 14, 40, 40, 48);
         }
 

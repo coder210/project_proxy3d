@@ -14,7 +14,7 @@ namespace JoyGame
         private readonly RenderMesh _quad;
 
         public Jr3d R => _r;
-        public Ui3D(Jr3d r, RenderMesh quad) { _r = r; _quad = quad; Bindings.R3dFontInit(r, "assets/fonts/simhei.ttf", 24); }
+        public Ui3D(Jr3d r, RenderMesh quad) { _r = r; _quad = quad; Bindings.R3dFontInit(r, "fonts/simhei.ttf", 24); }
 
         public void BeginFrame()
         {

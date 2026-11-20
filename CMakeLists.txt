@@ -288,6 +288,19 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${_cs_out}/Joy.Bindings.dll" "${_out_dir}/lib/Joy.Bindings.dll"
             COMMENT "Deploying C# runtime (JoyGame.dll + lib/)")
+        # 托管断点需要 PDB 与 DLL 同目录；Release/Debug 都会生成 portable PDB。
+        if(EXISTS "${_cs_out}/JoyGame.pdb")
+            add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_cs_out}/JoyGame.pdb" "${_out_dir}/JoyGame.pdb"
+                COMMENT "Deploying JoyGame.pdb for managed breakpoints")
+        endif()
+        if(EXISTS "${_cs_out}/Joy.Bindings.pdb")
+            add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_cs_out}/Joy.Bindings.pdb" "${_out_dir}/lib/Joy.Bindings.pdb"
+                COMMENT "Deploying Joy.Bindings.pdb")
+        endif()
         if(EXISTS "${_clr_bin}/coreclr.dll")
             add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different

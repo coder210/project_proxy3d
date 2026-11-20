@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- project_proxy3d 的 C# 游戏逻辑程序集。
        最终由 C++ 瘦宿主（joy cs 模块 / MonoVM）加载 JoyGame.dll 并调用
-       JoyGame.Host.OnInit / OnFrame / OnShutdown。
+       JoyGame.GameApplication.Initialize / Update / Shutdown。
        当前阶段：骨架 + 定点数 + GameState 雏形，尚未接入宿主的帧驱动。 -->
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
