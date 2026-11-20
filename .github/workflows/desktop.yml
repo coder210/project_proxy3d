@@ -138,7 +138,14 @@ jobs:
           name: project_proxy3d-${{ matrix.os }}
           # RUNTIME/RESOURCE 输出统一在 build/Release/（含 exe、CSharp 的
           # JoyGame.dll、coreclr 运行时与各资源目录）。
-          path: build/Release/**
+          # SwiftShader 软件 Vulkan（~6MB）只在本地/玩家部署需要；CI 的 smoke 是
+          # logic-only 不建 GPU，用不到。这里仅从上传中排除，构建/部署链与
+          # third_party/vulkan/ 文件均保留。
+          path: |
+            build/Release/**
+            !**/vk_swiftshader.dll
+            !**/vk_swiftshader_icd.json
+            !**/vulkan-1.dll
           if-no-files-found: error
           retention-days: 7
 
