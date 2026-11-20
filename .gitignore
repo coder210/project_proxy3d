@@ -5,7 +5,7 @@ CMakeLists.txt.user
 CMakeUserPresets.json
 compile_commands.json
 
-# .NET 构建产物（game_cs）
-game_cs/bin/
-game_cs/obj/
-game_cs/out/
+# .NET 构建产物（csharp）
+csharp/bin/
+csharp/obj/
+csharp/out/

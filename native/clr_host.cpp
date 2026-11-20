@@ -1,9 +1,9 @@
-#include "cs_host.h"
+#include "clr_host.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_loadso.h>
 #include <joy/joy.h>
-#include "third_party/joy/modules/cs/joy_csharp.h"
+#include "../third_party/joy/modules/cs/joy_csharp.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -65,7 +65,7 @@ static void setup_vulkan_dirs(const char* argv0)
     SDL_Log("[cs] VK_ICD_FILENAMES=%s", icd);
 }
 
-bool cs_host_init(int argc, char* argv[])
+bool clr_host_init(int argc, char* argv[])
 {
     if (!setup_clr_dirs()) return false;
     setup_vulkan_dirs(argc > 0 ? argv[0] : NULL);
@@ -119,7 +119,7 @@ bool cs_host_init(int argc, char* argv[])
     return true;
 }
 
-SDL_AppResult cs_host_event(SDL_Event* e)
+SDL_AppResult clr_host_event(SDL_Event* e)
 {
     if (!s_ready) return SDL_APP_CONTINUE;
     switch (e->type) {
@@ -149,7 +149,7 @@ SDL_AppResult cs_host_event(SDL_Event* e)
     return SDL_APP_CONTINUE;
 }
 
-SDL_AppResult cs_host_iterate()
+SDL_AppResult clr_host_iterate()
 {
     if (!s_ready) return SDL_APP_FAILURE;
 
@@ -179,7 +179,7 @@ SDL_AppResult cs_host_iterate()
     return SDL_APP_CONTINUE;
 }
 
-void cs_host_quit()
+void clr_host_quit()
 {
     if (s_csx && s_on_shutdown) csx_invoke_method(s_csx, s_on_shutdown, NULL);
     if (s_on_init) csx_method_free(s_on_init);
@@ -190,12 +190,12 @@ void cs_host_quit()
     s_ready = false;
 }
 
-bool cs_host_quit_requested()
+bool clr_host_quit_requested()
 {
     return s_ready && csx_host_quit_requested();
 }
 
-int cs_host_exit_code()
+int clr_host_exit_code()
 {
     return csx_host_exit_code();
 }
