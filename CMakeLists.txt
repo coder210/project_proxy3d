@@ -53,7 +53,15 @@ if(NOT EMSCRIPTEN)
         if(WIN32)
             set(JOY_CLR_PLATFORM "windows-x64")
         elseif(ANDROID)
-            set(JOY_CLR_PLATFORM "android-${ANDROID_ABI}")
+            if(ANDROID_ABI STREQUAL "arm64-v8a")
+                set(JOY_CLR_PLATFORM "android-arm64")
+            elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+                set(JOY_CLR_PLATFORM "android-armv7")
+            elseif(ANDROID_ABI STREQUAL "x86_64")
+                set(JOY_CLR_PLATFORM "android-x64")
+            else()
+                set(JOY_CLR_PLATFORM "android-${ANDROID_ABI}")
+            endif()
         elseif(APPLE)
             set(JOY_CLR_PLATFORM "macos-arm64")
         else()
@@ -71,13 +79,18 @@ if(NOT EMSCRIPTEN)
     if(NOT MONO_LIBRARIES)
         if(WIN32 AND EXISTS "${_clr_plat}/coreclr.import.lib")
             set(MONO_LIBRARIES "${_clr_plat}/coreclr.import.lib")
+        elseif(EXISTS "${_clr_plat}/libmonosgen-2.0.so")
+            # Android 的 MonoVM 原生库叫 libmonosgen-2.0.so，不是 libcoreclr.so。
+            set(MONO_LIBRARIES "${_clr_plat}/libmonosgen-2.0.so")
         elseif(EXISTS "${_clr_plat}/libcoreclr.so")
             set(MONO_LIBRARIES "${_clr_plat}/libcoreclr.so")
         elseif(EXISTS "${_clr_plat}/libcoreclr.dylib")
             set(MONO_LIBRARIES "${_clr_plat}/libcoreclr.dylib")
+        elseif(EXISTS "${_clr_plat}/libmonosgen-2.0.dylib")
+            set(MONO_LIBRARIES "${_clr_plat}/libmonosgen-2.0.dylib")
         endif()
     endif()
-    if(MONO_INCLUDE_DIR AND MONO_LIBRARIES)
+    if(MONO_INCLUDE_DIR AND MONO_LIBRARIES AND EXISTS "${MONO_INCLUDE_DIR}")
         set(JOY_MODULE_CS ON CACHE BOOL "C# 脚本模块" FORCE)
         set_property(GLOBAL PROPERTY JOY_REQUESTED_MODULES cs)
         message(STATUS "project_proxy3d: 启用 joy C# 模块 (${JOY_CLR_PLATFORM})")
@@ -262,7 +275,22 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
         COMMENT "dotnet build CSharp -> JoyGame.dll"
         VERBATIM)
     add_dependencies(project_proxy3d_cs_managed project_proxy3d_cs_restore)
-    add_dependencies(${EXECUTABLE_NAME} project_proxy3d_cs_managed)
+    # 必须每次构建都同步托管 DLL/PDB：POST_BUILD 只在 exe 重链时触发，
+    # 只改 C# 时 build/<Config>/JoyGame.dll 会停留在旧版本，调试符号也就对不上。
+    if(ANDROID)
+        set(_cs_runtime_dir "${MOBILE_ASSETS_DIR}")
+    else()
+        set(_cs_runtime_dir "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+    endif()
+    add_custom_target(project_proxy3d_cs_deploy
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_cs_runtime_dir}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_cs_out}/JoyGame.dll" "${_cs_runtime_dir}/JoyGame.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_cs_out}/JoyGame.pdb" "${_cs_runtime_dir}/JoyGame.pdb"
+        DEPENDS project_proxy3d_cs_managed
+        COMMENT "Syncing JoyGame.dll/pdb to runtime directory")
+    add_dependencies(${EXECUTABLE_NAME} project_proxy3d_cs_deploy)
 
     # VS 解决方案挂入两个 C# 工程（否则 IDE 里看不到 .cs，且 NuGet restore 缺引用项目信息
     # 会报 NU1105）。三个构建点串成链，避免 VS 与 dotnet build 同时写 obj/。
@@ -276,15 +304,29 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
 
     # 运行期部署：JoyGame.dll 放 exe 旁；BCL + Joy.Bindings.dll 放 lib/（CLR 宿主只从
     # MONO_LIB_DIR 指向的 lib 解析依赖）；coreclr.dll 由系统加载器从 exe 旁查找。
+    # Android：程序集/BCL 进 APK assets 根（AAssetManager 可读），MonoVM 原生库
+    # 与 libSystem.* shim 进 APK lib/<abi>（系统加载器只从那里 dlopen .so）。
     get_filename_component(_clr_bin "${MONO_LIBRARIES}" DIRECTORY)
     set(_clr_libs "${_clr_bin}/libs")
     if(EXISTS "${_clr_libs}/System.Private.CoreLib.dll")
-        set(_out_dir "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>")
+        if(ANDROID)
+            set(_out_dir "${MOBILE_ASSETS_DIR}")
+        else()
+            set(_out_dir "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>")
+        endif()
+        # 逐个 copy_if_different：内容相同就跳过，不触碰被运行进程锁定的 DLL。
+        file(GLOB _clr_lib_files LIST_DIRECTORIES false "${_clr_libs}/*")
+        set(_copy_lib_cmds)
+        foreach(_lib IN LISTS _clr_lib_files)
+            list(APPEND _copy_lib_cmds
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_lib}" "${_out_dir}/lib/")
+        endforeach()
         add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${_cs_out}/JoyGame.dll" "${_out_dir}/JoyGame.dll"
-            COMMAND ${CMAKE_COMMAND} -E remove_directory "${_out_dir}/lib"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${_clr_libs}" "${_out_dir}/lib"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${_out_dir}/lib"
+            ${_copy_lib_cmds}
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${_cs_out}/Joy.Bindings.dll" "${_out_dir}/lib/Joy.Bindings.dll"
             COMMENT "Deploying C# runtime (JoyGame.dll + lib/)")
@@ -308,12 +350,33 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
                 COMMENT "Deploying coreclr.dll for ${EXECUTABLE_NAME}")
         endif()
 
-        # Linux/macOS：libcoreclr.so|.dylib 与 CoreLib 的 P/Invoke shim (libSystem.*)
-        # 没有 DT_RUNPATH，dlopen 不会自动搜 exe 目录。拷到 exe 旁并设 rpath，
-        # 宿主侧再按 "./libSystem.*" 预加载（见 clr_host.cpp）。
-        if(UNIX AND NOT ANDROID)
+        if(ANDROID)
+            # APK 只把 lib/<abi>/*.so 解压为可加载库，assets/ 是压缩数据，
+            # 系统加载器找不到。MonoVM 主库 + libSystem.* shim 必须进 APK 的
+            # lib/<abi>；缺任一 shim，CoreLib 首次 JIT 的 P/Invoke 会闪退。
+            # Gradle 的 jniLibs.srcDir 指向 app/libs，故同时落到 app/libs/<abi>；
+            # 再拷一份到构建树 lib/<abi>（与 joy examples 的打包约定一致）。
+            file(GLOB _clr_shims "${_clr_bin}/libSystem.*.so")
+            set(_clr_so_files "${MONO_LIBRARIES}" ${_clr_shims})
+            set(_apk_libs "${CMAKE_BINARY_DIR}/lib/${ANDROID_ABI}")
+            if(MOBILE_MAIN_DIR)
+                get_filename_component(_gradle_app_dir "${MOBILE_MAIN_DIR}/.." ABSOLUTE)
+                list(APPEND _apk_libs "${_gradle_app_dir}/libs/${ANDROID_ABI}")
+            endif()
+            foreach(_apk_lib IN LISTS _apk_libs)
+                add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "${_apk_lib}"
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            ${_clr_so_files} "${_apk_lib}/"
+                    COMMENT "Deploying MonoVM + CoreLib shims into ${_apk_lib}")
+            endforeach()
+        elseif(UNIX)
+            # Linux/macOS：libcoreclr.so|.dylib 与 CoreLib 的 P/Invoke shim (libSystem.*)
+            # 没有 DT_RUNPATH，dlopen 不会自动搜 exe 目录。拷到 exe 旁并设 rpath，
+            # 宿主侧再按 "./libSystem.*" 预加载（见 clr_host.cpp）。
             file(GLOB _clr_native_libs
                  "${_clr_bin}/libcoreclr.*"
+                 "${_clr_bin}/libmonosgen-2.0.*"
                  "${_clr_bin}/libSystem.*")
             foreach(_clr_native IN LISTS _clr_native_libs)
                 add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
@@ -353,9 +416,29 @@ endif()
 if(MSVC)
     set_target_properties(${EXECUTABLE_NAME} PROPERTIES
         VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>"
+        # 原生 exe 内嵌 CoreCLR：F5 调试需开启诊断，混合调试引擎才能挂上。
+        VS_DEBUGGER_ENVIRONMENT "DOTNET_EnableDiagnostics=1\nCOMPlus_EnableDiagnostics=1"
     )
+    # 调试器类型必须写进 .vcxproj.user：VS 的“配置属性→调试”只读 user 文件，
+    # 写在 props 里的值 MSBuild 能求值但 IDE 启动调试时不生效（C# 断点不绑定）。
+    if(CMAKE_GENERATOR MATCHES "Visual Studio")
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/project_proxy3d.vcxproj.user.in"
+            "${CMAKE_BINARY_DIR}/project_proxy3d.vcxproj.user" @ONLY)
+    endif()
+    set_property(TARGET ${EXECUTABLE_NAME} PROPERTY
+        VS_USER_PROPS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Debugger.props")
 endif()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT "${EXECUTABLE_NAME}")
+
+# 标准 CoreCLR 宿主调试链验证（Godot 模式的最小样本）。
+# 默认关闭，避免影响正常游戏构建；需要验证 VS F5 断 C# 时打开。
+option(PROXY_BUILD_CORELR_SMOKE "Build minimal hostfxr/CoreCLR debug smoke target" OFF)
+if(PROXY_BUILD_CORELR_SMOKE AND WIN32 AND MSVC)
+    add_subdirectory(tools/coreclr_host_smoke)
+    set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY
+        VS_STARTUP_PROJECT coreclr_host_smoke)
+endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin" AND NOT CMAKE_GENERATOR MATCHES "Xcode")
     install(TARGETS ${EXECUTABLE_NAME}

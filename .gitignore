@@ -9,3 +9,9 @@ compile_commands.json
 CSharp/bin/
 CSharp/obj/
 CSharp/out/
+game_cs/bin/
+game_cs/obj/
+game_cs/out/
+game_cs/state/
+tools/*/bin/
+tools/*/obj/

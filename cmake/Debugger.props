@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- runtimes/windows-x64/coreclr.dll 同时导出 coreclr_initialize 与 mono_jit_init，
+       是 MonoVM 内嵌进 CoreCLR 的运行时（Unity 式），底层是 CoreCLR。
+       故 VS 调试引擎必须用 混合(.NET Core)，属性名也必须是 LocalDebuggerDebuggerType
+       （写成 LocalDebuggerType 时 VS 会直接忽略）。 -->
+  <PropertyGroup>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerDebuggerType>NativeWithManagedCore</LocalDebuggerDebuggerType>
+  </PropertyGroup>
+</Project>
