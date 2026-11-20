@@ -5,7 +5,7 @@
 
 // 纯 C# 3D 瘦入口：窗口 / r3d / 逻辑 / 场景全部在 JoyGame.dll 中，
 // 本宿主只创建 MonoVM、转发 SDL 事件与帧回调到 clr_host_*。
-// 原 C++ 游戏路径已完整迁移到 csharp/ 并移除（--cpp 回退不再存在）。
+// 原 C++ 游戏路径已完整迁移到 CSharp/ 并移除（--cpp 回退不再存在）。
 
 extern "C" SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     (void)appstate;

@@ -5,7 +5,7 @@ CMakeLists.txt.user
 CMakeUserPresets.json
 compile_commands.json
 
-# .NET 构建产物（csharp）
-csharp/bin/
-csharp/obj/
-csharp/out/
+# .NET 构建产物（CSharp）
+CSharp/bin/
+CSharp/obj/
+CSharp/out/

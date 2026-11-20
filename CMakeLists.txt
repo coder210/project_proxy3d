@@ -105,7 +105,7 @@ else()
     # 已根治，无需再把 exe 塞进同名子目录。
 endif()
 
-# 游戏逻辑/场景/渲染已全部迁移到 C#（csharp/），本 target 只保留 C++ 瘦宿主：
+# 游戏逻辑/场景/渲染已全部迁移到 C#（CSharp/），本 target 只保留 C++ 瘦宿主：
 # native/ 下的 main.cpp / clr_host.cpp / clr_host.h（引擎源码由 joy_add_sources 引入）。
 file(GLOB SRC_FILES CONFIGURE_DEPENDS "native/*.h" "native/*.c" "native/*.hpp" "native/*.cpp")
 
@@ -247,20 +247,20 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
     # IDE 里按 joy 真实目录树分组注入的引擎源码（source_group 只在当前目录生效）
     joy_ide_source_groups()
 
-    set(_cs_proj "${CMAKE_CURRENT_SOURCE_DIR}/csharp/JoyGame.csproj")
-    set(_cs_out  "${CMAKE_BINARY_DIR}/csharp")
+    set(_cs_proj "${CMAKE_CURRENT_SOURCE_DIR}/CSharp/JoyGame.csproj")
+    set(_cs_out  "${CMAKE_BINARY_DIR}/CSharp")
 
     # 干净 checkout 没有 obj/：命令行 MSBuild 不隐式 restore，显式还原并串进依赖链。
     add_custom_target(project_proxy3d_cs_restore
         COMMAND dotnet restore "${_cs_proj}"
-        COMMENT "dotnet restore csharp (+ Joy.Bindings)"
+        COMMENT "dotnet restore CSharp (+ Joy.Bindings)"
         VERBATIM)
     add_custom_target(project_proxy3d_cs_managed
         COMMAND dotnet build "${_cs_proj}" -c $<IF:$<CONFIG:Debug>,Debug,Release> -o "${_cs_out}"
         BYPRODUCTS
             "${_cs_out}/JoyGame.dll"
             "${_cs_out}/Joy.Bindings.dll"
-        COMMENT "dotnet build csharp -> JoyGame.dll"
+        COMMENT "dotnet build CSharp -> JoyGame.dll"
         VERBATIM)
     add_dependencies(project_proxy3d_cs_managed project_proxy3d_cs_restore)
     add_dependencies(${EXECUTABLE_NAME} project_proxy3d_cs_managed)
