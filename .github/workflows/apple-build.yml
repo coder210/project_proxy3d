@@ -1,6 +1,10 @@
-name: Build project_proxy3d for Apple
+name: Build project_proxy3d for Apple (macOS)
 
-# 桌面平台之一：Apple（iOS / tvOS / visionOS / macOS，矩阵；空字符串代表 macOS 桌面）。
+# 桌面平台之一：Apple 桌面（macOS）。
+# 游戏已完整迁移到 C#，运行时依赖 CLR/MonoVM；joy 仓只提供 macOS 版
+# libcoreclr.dylib，且 iOS/tvOS/visionOS 禁止 JIT 与动态库加载，无法承载 CLR，
+# 故只构建 macOS 桌面目标（原 iOS/tvOS/visionOS 矩阵已移除）。
+# 对齐 joy examples 的 desktop.yml：macos-15 + Xcode + 单 arm64 + .NET 8 SDK。
 # 由原 _ci/build.yml 的 build-mac job 拆分而来；单仓库只构建本项目目标 project_proxy3d。
 on:
   workflow_dispatch:
@@ -10,12 +14,8 @@ on:
 
 jobs:
   build-mac:
-    name: Build for Apple (${{ matrix.target == '' && 'macOS' || matrix.target }})
+    name: Build for macOS
     runs-on: macos-15
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [iOS, tvOS, visionOS, '']      # '' 表示 macOS 本地
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,14 +28,18 @@ jobs:
         with:
           xcode-version: "16.1"
 
+      # C# 模块（CSharp/）的 dotnet restore/build 依赖 .NET SDK。
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
       - name: Configure
         run: |
-          EXTRA=""
-          if [ -n "${{ matrix.target }}" ]; then EXTRA="-DCMAKE_SYSTEM_NAME=${{ matrix.target }}"; fi
+          # 只有 macos-arm64 runtime pack，双架构会在链接 x86_64 切片时失败。
           cmake -G "Xcode" \
                 -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
-                $EXTRA \
-                -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+                -DCMAKE_OSX_ARCHITECTURES=arm64 \
                 -S . -B build
 
       - name: Build
@@ -48,15 +52,13 @@ jobs:
       - name: Create DMG
         run: |
           cd build
-          TARGET="${{ matrix.target }}"
-          if [ -z "$TARGET" ]; then TARGET="macOS"; fi
-          hdiutil create -volname project_proxy3d_apple_$TARGET \
+          hdiutil create -volname project_proxy3d_apple_macOS \
             -srcfolder Release \
-            project_proxy3d_apple_$TARGET.dmg
+            project_proxy3d_apple_macOS.dmg
 
       - name: Upload Build
         uses: actions/upload-artifact@v4
         with:
-          name: project_proxy3d-apple-${{ matrix.target == '' && 'macOS' || matrix.target }}
+          name: project_proxy3d-apple-macOS
           retention-days: 7
           path: build/*.dmg
