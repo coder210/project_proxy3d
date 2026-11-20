@@ -8,6 +8,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#if defined(_WIN32)
+#  include <direct.h>
+#else
+#  include <unistd.h>
+#endif
 
 /* ---- C# 瘦宿主状态（照 joy examples/csharp_host）---- */
 static csx_p        s_csx = NULL;
@@ -30,33 +35,76 @@ static int find_arg(int argc, char* argv[], const char* name)
     return -1;
 }
 
+/* 把 CWD 对齐到 exe 目录（照抄 joy examples 的 align_working_dir）。
+ * JoyGame.dll / lib/ / assets 都是相对路径；从仓库根或 IDE 启动时若不对齐，
+ * MONO_LIB_DIR="lib" 会解析到错误目录，mono_jit_init() 因找不到 CoreLib 而 abort。 */
+static void align_working_dir(const char* argv0)
+{
+#if defined(__ANDROID__)
+    (void)argv0;
+#else
+    if (!argv0 || !*argv0) return;
+    const char* sep = NULL;
+    for (const char* p = argv0; *p; ++p)
+        if (*p == '/' || *p == '\\') sep = p;
+    if (!sep) return; // 经 PATH 启动，CWD 通常已是资源根
+    size_t n = (size_t)(sep - argv0);
+    if (n == 0 || n >= 1024) return;
+    char dir[1024];
+    std::memcpy(dir, argv0, n);
+    dir[n] = '\0';
+#if defined(_WIN32)
+    (void)_chdir(dir);
+#else
+    (void)chdir(dir);
+#endif
+#endif
+}
+
 static bool setup_clr_dirs()
 {
 #if defined(_WIN32)
     _putenv_s("MONO_LIB_DIR", "lib");
 #else
     setenv("MONO_LIB_DIR", "lib", 1);
+
+    /* Linux/macOS 的 CoreLib P/Invoke 目标拆成独立 shim，libcoreclr 无 RUNPATH，
+     * dlopen 不搜 exe 目录；按带 "./" 的相对路径预加载（CWD 已对齐 exe 目录），
+     * 缺失的忽略。清单与 runtimes/<platform>/ 入库的 libSystem.* 一致。 */
+    static const char* const kClrShims[] = {
+        "libSystem.Native.so", "libSystem.Native.dylib",
+        "libSystem.Globalization.Native.so", "libSystem.Globalization.Native.dylib",
+        "libSystem.IO.Compression.Native.so", "libSystem.IO.Compression.Native.dylib",
+        "libSystem.Net.Security.Native.so", "libSystem.Net.Security.Native.dylib",
+        "libSystem.Security.Cryptography.Native.OpenSsl.so",
+        "libSystem.Security.Cryptography.Native.OpenSsl.dylib",
+        "libSystem.Security.Cryptography.Native.Apple.dylib",
+        NULL
+    };
+    for (int i = 0; kClrShims[i]; ++i) {
+        char path[512];
+        std::snprintf(path, sizeof(path), "./%s", kClrShims[i]);
+        if (!SDL_LoadObject(path)) SDL_ClearError();
+    }
 #endif
     return true;
 }
 
 /* 让 SDL3 的 Vulkan 后端发现随程序部署的 SwiftShader ICD。
- * 三个文件由 CMake POST_BUILD 放到 exe 目录；这里从 argv[0] 取 exe 目录，
- * 拼出 vk_swiftshader_icd.json 的绝对路径设进 VK_ICD_FILENAMES。 */
-static void setup_vulkan_dirs(const char* argv0)
+ * 三个文件由 CMake POST_BUILD 放到 exe 目录；align_working_dir() 之后 CWD
+ * 已是 exe 目录，直接拼该目录下的 vk_swiftshader_icd.json 绝对路径。 */
+static void setup_vulkan_dirs()
 {
-    if (!argv0 || !*argv0) return;
-    const char* sep = NULL;
-    for (const char* p = argv0; *p; ++p)
-        if (*p == '/' || *p == '\\') sep = p;
-    if (!sep) return; // 经 PATH 启动，ICD 与 exe 同目录时 CWD 通常已是该目录
-    size_t n = (size_t)(sep - argv0);
-    if (n == 0 || n >= 1024) return;
-    char dir[1024], icd[1080];
-    std::memcpy(dir, argv0, n);
-    dir[n] = '\0';
-    std::snprintf(icd, sizeof(icd), "%s%cvk_swiftshader_icd.json", dir,
-                  (sep[0] == '\\' || sep[0] == '/') ? sep[0] : '/');
+    char cwd[1024];
+    if (!getcwd(cwd, sizeof(cwd))) return;
+    char sep =
+#if defined(_WIN32)
+        '\\';
+#else
+        '/';
+#endif
+    char icd[1080];
+    std::snprintf(icd, sizeof(icd), "%s%cvk_swiftshader_icd.json", cwd, sep);
 #if defined(_WIN32)
     _putenv_s("VK_ICD_FILENAMES", icd);
 #else
@@ -67,8 +115,11 @@ static void setup_vulkan_dirs(const char* argv0)
 
 bool clr_host_init(int argc, char* argv[])
 {
+    /* 先对齐 CWD 到 exe 目录：JoyGame.dll / lib/ / assets / SwiftShader ICD
+     * 全是相对资源根的路径，宿主不切 CWD 会静默解析到别处。 */
+    align_working_dir(argc > 0 ? argv[0] : NULL);
+    setup_vulkan_dirs();
     if (!setup_clr_dirs()) return false;
-    setup_vulkan_dirs(argc > 0 ? argv[0] : NULL);
 
     const char* modeVal = NULL;
     int mi = find_arg(argc, argv, "--mode");

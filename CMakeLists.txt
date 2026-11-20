@@ -295,6 +295,30 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
                 COMMENT "Deploying coreclr.dll for ${EXECUTABLE_NAME}")
         endif()
 
+        # Linux/macOS：libcoreclr.so|.dylib 与 CoreLib 的 P/Invoke shim (libSystem.*)
+        # 没有 DT_RUNPATH，dlopen 不会自动搜 exe 目录。拷到 exe 旁并设 rpath，
+        # 宿主侧再按 "./libSystem.*" 预加载（见 clr_host.cpp）。
+        if(UNIX AND NOT ANDROID)
+            file(GLOB _clr_native_libs
+                 "${_clr_bin}/libcoreclr.*"
+                 "${_clr_bin}/libSystem.*")
+            foreach(_clr_native IN LISTS _clr_native_libs)
+                add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${_clr_native}" "${_out_dir}/"
+                    COMMENT "Deploying CLR native lib ${_clr_native}")
+            endforeach()
+            if(APPLE)
+                set_target_properties(${EXECUTABLE_NAME} PROPERTIES
+                    BUILD_RPATH "@loader_path"
+                    INSTALL_RPATH "@loader_path")
+            else()
+                set_target_properties(${EXECUTABLE_NAME} PROPERTIES
+                    BUILD_RPATH "$ORIGIN"
+                    INSTALL_RPATH "$ORIGIN")
+            endif()
+        endif()
+
         # SwiftShader 软件 Vulkan：无独显环境让 SDL3 GPU 后端可用。
         # 三个文件登记在 third_party/vulkan/，部署到 exe 旁；运行时还需设置
         # VK_ICD_FILENAMES 指向 exe 目录的 vk_swiftshader_icd.json（见 clr_host.cpp）。
@@ -308,7 +332,9 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
             endforeach()
         endif()
     else()
-        message(WARNING "project_proxy3d: 缺平台 BCL (${_clr_libs}/System.Private.CoreLib.dll)，跳过 C# 运行时部署")
+        # 缺 CoreLib 时 mono_jit_init() 会直接 abort（assembly.c:2718 corlib not met），
+        # 与其产出坏包在运行时崩，不如配置阶段就失败（同 joy examples/csharp_host）。
+        message(FATAL_ERROR "project_proxy3d: 缺平台 BCL ${_clr_libs}/System.Private.CoreLib.dll —— 请确认 joy 子模块 runtimes/ 已正确 checkout")
     endif()
 endif()
 if(MSVC)

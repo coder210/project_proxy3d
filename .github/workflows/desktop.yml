@@ -98,7 +98,8 @@ jobs:
           cmake --build build --config Release --target project_proxy3d 2>&1 | tee build.log
 
       # --smoke 是 headless 自检（不建窗口）：跑固定帧数后打印 "smoke finished" 并退出 0。
-      # 资源路径全是相对路径，这里特意从仓库根启动，让贴图/字体缺失直接变成 CI 失败。
+      # 宿主会把 CWD 对齐到 exe 目录；这里从仓库根启动以覆盖相对路径解析回归。
+      # macOS 是 .app bundle，可执行文件在 Contents/MacOS/ 内（非 build/Release 根）。
       - name: Smoke test
         shell: bash
         run: |
@@ -106,9 +107,12 @@ jobs:
           out=build/Release
           if [ "$RUNNER_OS" = "Windows" ]; then
             exe="$out/project_proxy3d.exe"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            exe="$out/project_proxy3d.app/Contents/MacOS/project_proxy3d"
           else
             exe="$out/project_proxy3d"
           fi
+          test -x "$exe" || { echo "::error::smoke exe not found: $exe"; exit 1; }
           ( cd "$GITHUB_WORKSPACE" && "./$exe" --smoke 60 ) 2>&1 | tee smoke.log
           grep -Fq 'smoke finished' smoke.log \
             || { echo "::error::project_proxy3d smoke did not finish"; exit 1; }
