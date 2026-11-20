@@ -3,7 +3,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_loadso.h>
 #include <joy/joy.h>
-#include "../third_party/joy/modules/cs/joy_csharp.h"
+#include "third_party/joy/modules/cs/joy_csharp.h"
 
 #include <cstdio>
 #include <cstdlib>

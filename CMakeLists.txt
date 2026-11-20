@@ -105,9 +105,9 @@ else()
     # 已根治，无需再把 exe 塞进同名子目录。
 endif()
 
-# 游戏逻辑/场景/渲染已全部迁移到 C#（CSharp/），本 target 只保留 C++ 瘦宿主：
-# native/ 下的 main.cpp / clr_host.cpp / clr_host.h（引擎源码由 joy_add_sources 引入）。
-file(GLOB SRC_FILES CONFIGURE_DEPENDS "native/*.h" "native/*.c" "native/*.hpp" "native/*.cpp")
+# 游戏逻辑/场景/渲染已全部迁移到 C#（CSharp/），本 target 只保留根目录的 C++ 瘦宿主：
+# main.cpp / clr_host.cpp / clr_host.h（引擎源码由 joy_add_sources 引入）。
+file(GLOB SRC_FILES CONFIGURE_DEPENDS "*.h" "*.c" "*.hpp" "*.cpp")
 
 # 合并所有源文件
 set(PROJECT_FILES
@@ -152,9 +152,8 @@ endif()
 include(${JOY_ADD_CMAKE})
 joy_add_sources(${EXECUTABLE_NAME})
 
-# 项目根目录与 C++ 宿主目录（clr_host.cpp 用 ../third_party 相对路径，此处保留根目录兼容）
+# 项目根目录（main.cpp / clr_host.cpp 使用）
 target_include_directories(${EXECUTABLE_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_include_directories(${EXECUTABLE_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native")
 
 # ------------------- 资产处理 -------------------
 set(ASSETS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/assets")
@@ -298,7 +297,7 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
 
         # SwiftShader 软件 Vulkan：无独显环境让 SDL3 GPU 后端可用。
         # 三个文件登记在 third_party/vulkan/，部署到 exe 旁；运行时还需设置
-        # VK_ICD_FILENAMES 指向 exe 目录的 vk_swiftshader_icd.json（见 native/clr_host.cpp）。
+        # VK_ICD_FILENAMES 指向 exe 目录的 vk_swiftshader_icd.json（见 clr_host.cpp）。
         set(_vk_src "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan")
         if(WIN32 AND EXISTS "${_vk_src}/vulkan-1.dll")
             foreach(_vk_file vulkan-1.dll vk_swiftshader.dll vk_swiftshader_icd.json)
