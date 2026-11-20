@@ -18,11 +18,11 @@
     <ProjectReference Include="$(JoyCSharpDir)/Joy.Bindings.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <!-- 目录布局对齐 joy examples/csharp：runtime=宿主/骨架，game=玩法，test=验证脚本 -->
-    <Compile Include="runtime\**\*.cs" />
+    <!-- 目录布局：Runtime=宿主/骨架，Game=玩法，Test=验证脚本 -->
+    <Compile Include="Runtime\**\*.cs" />
     <!-- 3D 表现层：C# 自建窗口/r3d、战斗场景渲染（迁移自 C++ scenes/passes） -->
-    <Compile Include="runtime3d\**\*.cs" />
-    <Compile Include="game\**\*.cs" />
-    <Compile Include="test\**\*.cs" />
+    <Compile Include="Runtime3D\**\*.cs" />
+    <Compile Include="Game\**\*.cs" />
+    <Compile Include="Test\**\*.cs" />
   </ItemGroup>
 </Project>
