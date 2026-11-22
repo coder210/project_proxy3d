@@ -69,17 +69,21 @@ static void align_working_dir(const char* argv0)
 static const char* const kAndroidClrLibs[] = {
     "System.Private.CoreLib.dll", "netstandard.dll",
     "System.Runtime.dll", "System.Collections.dll",
-    "Joy.Bindings.dll", NULL
+    "Joy.Bindings.dll", "JoyGame.dll", NULL   /* TPA 也需要 JoyGame.dll 本体 */
 };
 
 static bool copy_android_clr_lib(const char* dir, const char* name)
 {
     char src[512], dst[512];
+    /* BCL/Joy.Bindings 在 assets/lib/；JoyGame.dll 在 assets 根（CMake 部署不同）。 */
     std::snprintf(src, sizeof(src), "lib/%s", name);
-    std::snprintf(dst, sizeof(dst), "%s%s", dir, name);
-
     size_t size = 0;
     void* data = SDL_LoadFile(src, &size);
+    if (!data) {
+        std::snprintf(src, sizeof(src), "%s", name);
+        data = SDL_LoadFile(src, &size);
+    }
+    std::snprintf(dst, sizeof(dst), "%s%s", dir, name);
     if (!data) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "[cs] read asset %s failed: %s", src, SDL_GetError());
@@ -109,8 +113,9 @@ static bool setup_clr_dirs()
             return false;
         }
     }
-    /* MONO_LIB_DIR 由 jcsx.c 读取；MONO_PATH 与 mono_set_assemblies_path()
-     * 是 MonoVM 本身解析程序集用的，两者都指向同一个解包目录。 */
+    /* JOY_CLR_LIB_DIR 由 jcsx.c 的 coreclr_initialize 读取来拼 TPA；
+     * MONO_PATH / MONO_LIB_DIR 保留给上游 joy 代码和测试脚本用，都指向同一解包目录。 */
+    setenv("JOY_CLR_LIB_DIR", pref, 1);
     setenv("MONO_PATH", pref, 1);
     setenv("MONO_LIB_DIR", pref, 1);
     SDL_Log("[cs] CLR dirs: %s", pref);
@@ -193,6 +198,11 @@ bool clr_host_init(int argc, char* argv[])
     } else {
         SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, "60");
     }
+
+    /* C# 调试：运行时为 hostfxr 启动的真 CoreCLR，ICorDebug 诊断通道由
+     * DOTNET_EnableDiagnostics=1 激活（见 CMake 生成的 .vcxproj 调试环境），
+     * VS 用 NativeWithManagedCore 引擎 F5 即可附加，见 docs/csharp-debugging.md。
+     * 旧的 Mono 软调试代理（PROXY_DEBUG_CSHARP / 22222）已随迁移废弃。 */
 
     SDL_Log("[cs] creating CoreCLR, assembly=JoyGame.dll");
     s_csx = csx_create();

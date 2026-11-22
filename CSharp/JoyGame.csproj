@@ -4,7 +4,11 @@
        JoyGame.GameApplication.Initialize / Update / Shutdown。
        当前阶段：骨架 + 定点数 + GameState 雏形，尚未接入宿主的帧驱动。 -->
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- 自包含 publish 需要 restore 阶段就把 RID 写进 project.assets.json，
+         否则 NETSDK1047。声明所有目标平台。 -->
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>JoyGame</AssemblyName>
     <RootNamespace>ProxyGame</RootNamespace>
     <LangVersion>latest</LangVersion>

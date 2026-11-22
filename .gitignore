@@ -15,3 +15,7 @@ game_cs/out/
 game_cs/state/
 tools/*/bin/
 tools/*/obj/
+
+# 本地实验/构建目录（下划线开头，非源码）
+_*/
+_apkcheck/

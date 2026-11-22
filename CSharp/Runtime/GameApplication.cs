@@ -1,4 +1,6 @@
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using ProxyGame;
 
 // 入口类命名空间/类名必须与宿主的 csx_find_method("JoyGame","GameApplication",...) 一致。
@@ -22,6 +24,18 @@ namespace JoyGame
         private static float _fixedAccumulator;
         private static int _frame;
 
+        /// <summary>
+        /// CoreCLR 绑定初始化入口。必须由宿主从 JoyGame.dll 取函数指针调用，
+        /// 保证 NativeFuncs.Initialize 与 Initialize/Update/Shutdown 在同一个
+        /// AssemblyLoadContext 实例上（否则函数指针表填在 A、业务调用落在 B，全 NULL）。
+        /// </summary>
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+        public static void Bootstrap(IntPtr lookupFn)
+        {
+            Joy.NativeFuncs.Initialize(lookupFn);
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Initialize(int width, int height, int smokeFrames)
         {
             // 调试辅助：JOY_ATTACH_DEBUGGER=1 时弹出 JIT 调试器选择（VS 需已注册为 JIT 调试器）。
@@ -65,6 +79,7 @@ namespace JoyGame
             if (_app != null) _app.Start();
         }
 
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Update(float dt)
         {
             AccumulateFixed(dt);
@@ -103,6 +118,7 @@ namespace JoyGame
             ProxyGame.Systems.CleanupSystem.Update(_smokeState);
         }
 
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Shutdown()
         {
             Joy.Host.log("[proxy.cs] shutdown frames=" + _frame);

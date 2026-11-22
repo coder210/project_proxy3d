@@ -90,10 +90,51 @@ if(NOT EMSCRIPTEN)
             set(MONO_LIBRARIES "${_clr_plat}/libmonosgen-2.0.dylib")
         endif()
     endif()
+    # CoreCLR 桌面宿主需要 hostfxr（Android 走 libmonosgen 的 coreclr_*，不需要）。
+    # 优先用系统 dotnet 的 hostfxr（与 JoyGame.runtimeconfig.json 的 framework 引用配套）；
+    # 找不到时回退到 JOY_CLR_PLATFORM 目录里随仓部署的那份。
+    if(WIN32 AND NOT ANDROID)
+        if(NOT JOY_HOSTFXR_DLL)
+            file(GLOB _hostfxr_candidates
+                "C:/Program Files/dotnet/host/fxr/*/hostfxr.dll"
+                "$ENV{DOTNET_ROOT}/host/fxr/*/hostfxr.dll"
+                "${_clr_plat}/hostfxr.dll")
+            if(_hostfxr_candidates)
+                list(GET _hostfxr_candidates -1 JOY_HOSTFXR_DLL)
+            endif()
+        endif()
+        # dotnet root = hostfxr.dll 所在目录往上三级（<root>/host/fxr/<ver>/hostfxr.dll）。
+        # hostfxr 被部署到 exe 目录后无法反推，需显式 DOTNET_ROOT 告诉它 framework 在哪。
+        if(JOY_HOSTFXR_DLL)
+            get_filename_component(_fxr_dir "${JOY_HOSTFXR_DLL}" DIRECTORY)      # .../host/fxr/<ver>
+            get_filename_component(_fxr_host "${_fxr_dir}" DIRECTORY)            # .../host/fxr
+            get_filename_component(_fxr_host2 "${_fxr_host}" DIRECTORY)          # .../host
+            get_filename_component(JOY_DOTNET_ROOT "${_fxr_host2}" DIRECTORY)    # <root>
+        endif()
+    elseif(UNIX AND NOT ANDROID)
+        if(NOT JOY_HOSTFXR_DLL)
+            file(GLOB _hostfxr_candidates
+                "/usr/share/dotnet/host/fxr/*/libhostfxr.so"
+                "/usr/lib/dotnet/host/fxr/*/libhostfxr.so"
+                "$ENV{DOTNET_ROOT}/host/fxr/*/libhostfxr.so"
+                "${_clr_plat}/libhostfxr.so")
+            if(_hostfxr_candidates)
+                list(GET _hostfxr_candidates -1 JOY_HOSTFXR_DLL)
+            endif()
+        endif()
+    endif()
+
     if(MONO_INCLUDE_DIR AND MONO_LIBRARIES AND EXISTS "${MONO_INCLUDE_DIR}")
         set(JOY_MODULE_CS ON CACHE BOOL "C# 脚本模块" FORCE)
         set_property(GLOBAL PROPERTY JOY_REQUESTED_MODULES cs)
         message(STATUS "project_proxy3d: 启用 joy C# 模块 (${JOY_CLR_PLATFORM})")
+        if(NOT ANDROID)
+            if(JOY_HOSTFXR_DLL)
+                message(STATUS "project_proxy3d: hostfxr = ${JOY_HOSTFXR_DLL}")
+            else()
+                message(WARNING "project_proxy3d: 未找到 hostfxr，桌面 CoreCLR 宿主将无法启动")
+            endif()
+        endif()
     else()
         message(WARNING
             "project_proxy3d: 未找到 CLR 开发包，C# 模块跳过（只编空桩）。"
@@ -167,6 +208,21 @@ joy_add_sources(${EXECUTABLE_NAME})
 
 # 项目根目录（main.cpp / clr_host.cpp 使用）
 target_include_directories(${EXECUTABLE_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+
+# CoreCLR 桌面宿主：把系统 dotnet root 传给 jcsx.c，初始化前设 DOTNET_ROOT，
+# 否则 hostfxr 从部署目录（exe 旁）找不到 Microsoft.NETCore.App framework。
+if(JOY_MODULE_CS AND NOT ANDROID)
+    if(JOY_DOTNET_ROOT)
+        target_compile_definitions(${EXECUTABLE_NAME} PRIVATE
+            "JOY_DOTNET_ROOT=\"${JOY_DOTNET_ROOT}\"")
+    endif()
+    if(JOY_HOSTFXR_DLL)
+        # CMake 里是正斜杠，C 字符串可用；转成正斜杠避免转义问题。
+        string(REPLACE "\\" "/" _hostfxr_cmake "${JOY_HOSTFXR_DLL}")
+        target_compile_definitions(${EXECUTABLE_NAME} PRIVATE
+            "JOY_HOSTFXR_PATH_MACRO=\"${_hostfxr_cmake}\"")
+    endif()
+endif()
 
 # ------------------- 资产处理 -------------------
 set(ASSETS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/assets")
@@ -275,21 +331,33 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
         COMMENT "dotnet build CSharp -> JoyGame.dll"
         VERBATIM)
     add_dependencies(project_proxy3d_cs_managed project_proxy3d_cs_restore)
-    # 必须每次构建都同步托管 DLL/PDB：POST_BUILD 只在 exe 重链时触发，
-    # 只改 C# 时 build/<Config>/JoyGame.dll 会停留在旧版本，调试符号也就对不上。
+
+    # ---- 桌面自包含运行时（Godot 4 导出版的做法）----
+    # dotnet publish --self-contained + BCL 白名单裁剪，把 ~88MB 降到 ~48MB。
+    # 共享模块与 joy example_csharp 用同一套，保证主工程/示例部署一致。
+    # Android 不走这里（用 libmonosgen 的 coreclr_* API）。
     if(ANDROID)
         set(_cs_runtime_dir "${MOBILE_ASSETS_DIR}")
+        # 必须每次构建都同步托管 DLL/PDB：POST_BUILD 只在 exe 重链时触发，
+        # 只改 C# 时 build/<Config>/JoyGame.dll 会停留在旧版本，符号对不上。
+        add_custom_target(project_proxy3d_cs_deploy
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${_cs_runtime_dir}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_cs_out}/JoyGame.dll" "${_cs_runtime_dir}/JoyGame.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_cs_out}/JoyGame.pdb" "${_cs_runtime_dir}/JoyGame.pdb"
+            DEPENDS project_proxy3d_cs_managed
+            COMMENT "Syncing JoyGame.dll/pdb to runtime directory")
     else()
         set(_cs_runtime_dir "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+        get_filename_component(_joy_cmake_dir "${JOY_ADD_CMAKE}" DIRECTORY)
+        include(${_joy_cmake_dir}/cmake/JoySelfContained.cmake)
+        joy_deploy_selfcontained(${EXECUTABLE_NAME} "${_cs_proj}" "${_cs_out}"
+                                 "${_cs_runtime_dir}" "$<IF:$<CONFIG:Debug>,Debug,Release>")
+        add_dependencies(${EXECUTABLE_NAME}_sc_deploy project_proxy3d_cs_managed)
+        add_custom_target(project_proxy3d_cs_deploy)
+        add_dependencies(project_proxy3d_cs_deploy ${EXECUTABLE_NAME}_sc_deploy)
     endif()
-    add_custom_target(project_proxy3d_cs_deploy
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${_cs_runtime_dir}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${_cs_out}/JoyGame.dll" "${_cs_runtime_dir}/JoyGame.dll"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${_cs_out}/JoyGame.pdb" "${_cs_runtime_dir}/JoyGame.pdb"
-        DEPENDS project_proxy3d_cs_managed
-        COMMENT "Syncing JoyGame.dll/pdb to runtime directory")
     add_dependencies(${EXECUTABLE_NAME} project_proxy3d_cs_deploy)
 
     # VS 解决方案挂入两个 C# 工程（否则 IDE 里看不到 .cs，且 NuGet restore 缺引用项目信息
@@ -315,21 +383,33 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
             set(_out_dir "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>")
         endif()
         # 逐个 copy_if_different：内容相同就跳过，不触碰被运行进程锁定的 DLL。
+        # 注意：MonoVM 的 BCL（System.Private.CoreLib.dll 等）只在 Android 需要。
+        # 桌面走系统真 CoreCLR + hostfxr，若把 MonoVM BCL 放 exe/lib 会让
+        # CoreCLR 误加载 Mono 版 CoreLib（MonoStackFrame not found 崩溃）。
         file(GLOB _clr_lib_files LIST_DIRECTORIES false "${_clr_libs}/*")
         set(_copy_lib_cmds)
-        foreach(_lib IN LISTS _clr_lib_files)
-            list(APPEND _copy_lib_cmds
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${_lib}" "${_out_dir}/lib/")
-        endforeach()
+        if(ANDROID)
+            foreach(_lib IN LISTS _clr_lib_files)
+                list(APPEND _copy_lib_cmds
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${_lib}" "${_out_dir}/lib/")
+            endforeach()
+        endif()
+        # 桌面：Joy.Bindings.dll 必须与 JoyGame.dll 同目录，保证 hostfxr 加载的
+        # 绑定程序集与 JoyGame 依赖解析到同一个 AssemblyLoadContext 实例。
+        if(ANDROID)
+            set(_bindings_deploy "${_out_dir}/lib/Joy.Bindings.dll")
+        else()
+            set(_bindings_deploy "${_out_dir}/Joy.Bindings.dll")
+        endif()
         add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${_cs_out}/JoyGame.dll" "${_out_dir}/JoyGame.dll"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${_out_dir}/lib"
             ${_copy_lib_cmds}
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${_cs_out}/Joy.Bindings.dll" "${_out_dir}/lib/Joy.Bindings.dll"
-            COMMENT "Deploying C# runtime (JoyGame.dll + lib/)")
+                    "${_cs_out}/Joy.Bindings.dll" "${_bindings_deploy}"
+            COMMENT "Deploying C# runtime (JoyGame.dll + Joy.Bindings.dll)")
         # 托管断点需要 PDB 与 DLL 同目录；Release/Debug 都会生成 portable PDB。
         if(EXISTS "${_cs_out}/JoyGame.pdb")
             add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
@@ -338,16 +418,34 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
                 COMMENT "Deploying JoyGame.pdb for managed breakpoints")
         endif()
         if(EXISTS "${_cs_out}/Joy.Bindings.pdb")
+            if(ANDROID)
+                set(_bindings_pdb_deploy "${_out_dir}/lib/Joy.Bindings.pdb")
+            else()
+                set(_bindings_pdb_deploy "${_out_dir}/Joy.Bindings.pdb")
+            endif()
             add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${_cs_out}/Joy.Bindings.pdb" "${_out_dir}/lib/Joy.Bindings.pdb"
+                        "${_cs_out}/Joy.Bindings.pdb" "${_bindings_pdb_deploy}"
                 COMMENT "Deploying Joy.Bindings.pdb")
         endif()
-        if(EXISTS "${_clr_bin}/coreclr.dll")
+        # MonoVM coreclr.dll 只在 Android 需要（libmonosgen 是 .so，桌面不用它）。
+        # 桌面用系统真 CoreCLR，部署 MonoVM coreclr.dll 会导致 CoreLib 混用崩溃。
+        if(ANDROID AND EXISTS "${_clr_bin}/coreclr.dll")
             add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         "${_clr_bin}/coreclr.dll" "${_out_dir}/coreclr.dll"
                 COMMENT "Deploying coreclr.dll for ${EXECUTABLE_NAME}")
+        endif()
+
+        # 桌面自包含：hostfxr.dll / coreclr.dll / BCL 已由 sc_deploy 铺到 exe 目录，
+        # jcsx.c 探测到 exe 目录的 hostfxr.dll 就走命令行模式（Godot 导出版做法），
+        # 玩家无需装 .NET。这里只需补上自包含版 runtimeconfig.json（无 framework 节点）。
+        if(NOT ANDROID)
+            add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${CMAKE_CURRENT_SOURCE_DIR}/CSharp/JoyGame.runtimeconfig.json"
+                        "${_out_dir}/JoyGame.runtimeconfig.json"
+                COMMENT "Deploying JoyGame.runtimeconfig.json for CoreCLR host")
         endif()
 
         if(ANDROID)
