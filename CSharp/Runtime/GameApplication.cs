@@ -29,14 +29,26 @@ namespace JoyGame
         /// 保证 NativeFuncs.Initialize 与 Initialize/Update/Shutdown 在同一个
         /// AssemblyLoadContext 实例上（否则函数指针表填在 A、业务调用落在 B，全 NULL）。
         /// </summary>
+        // 桌面：hostfxr 取 UCO 函数指针直调。
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Bootstrap(IntPtr lookupFn)
+        {
+            BootstrapMono(lookupFn);
+        }
+
+        // Android：mono_runtime_invoke 只能调普通 public static 方法。
+        public static void BootstrapMono(IntPtr lookupFn)
         {
             Joy.NativeFuncs.Initialize(lookupFn);
         }
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Initialize(int width, int height, int smokeFrames)
+        {
+            InitializeMono(width, height, smokeFrames);
+        }
+
+        public static void InitializeMono(int width, int height, int smokeFrames)
         {
             // 调试辅助：JOY_ATTACH_DEBUGGER=1 时弹出 JIT 调试器选择（VS 需已注册为 JIT 调试器）。
             if (Environment.GetEnvironmentVariable("JOY_ATTACH_DEBUGGER") == "1") {
@@ -82,6 +94,11 @@ namespace JoyGame
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Update(float dt)
         {
+            UpdateMono(dt);
+        }
+
+        public static void UpdateMono(float dt)
+        {
             AccumulateFixed(dt);
 
             if (_app != null) { _app.Tick(dt); _frame++; return; }
@@ -120,6 +137,11 @@ namespace JoyGame
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Shutdown()
+        {
+            ShutdownMono();
+        }
+
+        public static void ShutdownMono()
         {
             Joy.Host.log("[proxy.cs] shutdown frames=" + _frame);
         }

@@ -113,7 +113,8 @@ static bool setup_clr_dirs()
             return false;
         }
     }
-    /* JOY_CLR_LIB_DIR 由 jcsx.c 的 coreclr_initialize 读取来拼 TPA；
+    /* JOY_CLR_LIB_DIR 由 jcsx.c 的 Android mono embedding 读取，传给
+     * mono_set_assemblies_path 定位 BCL/JoyGame.dll/Joy.Bindings.dll；
      * MONO_PATH / MONO_LIB_DIR 保留给上游 joy 代码和测试脚本用，都指向同一解包目录。 */
     setenv("JOY_CLR_LIB_DIR", pref, 1);
     setenv("MONO_PATH", pref, 1);
