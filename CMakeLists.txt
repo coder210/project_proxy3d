@@ -90,6 +90,14 @@ if(NOT EMSCRIPTEN)
             set(MONO_LIBRARIES "${_clr_plat}/libmonosgen-2.0.dylib")
         endif()
     endif()
+    # Android：MonoVM 运行时从 runtimes/nupkg 解包暂存，与桌面用同一套来源。
+    # 这里强制覆盖 MONO_LIBRARIES（含旧的缓存值），因为 runtimes/<platform>/
+    # 散装目录已删除，沿用旧路径只会指向不存在的文件。
+    if(ANDROID)
+        include("${JOY_REPO_DIR}/cmake/JoyMonoVm.cmake")
+        joy_monovm_stage(_joy_monovm_stage)
+        set(MONO_LIBRARIES "${_joy_monovm_stage}/libmonosgen-2.0.so")
+    endif()
     # CoreCLR 桌面宿主需要 hostfxr（Android 走 libmonosgen 的 coreclr_*，不需要）。
     # 优先用系统 dotnet 的 hostfxr（与 JoyGame.runtimeconfig.json 的 framework 引用配套）；
     # 找不到时回退到 JOY_CLR_PLATFORM 目录里随仓部署的那份。
