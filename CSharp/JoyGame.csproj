@@ -7,7 +7,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <!-- 自包含 publish 需要 restore 阶段就把 RID 写进 project.assets.json，
          否则 NETSDK1047。声明所有目标平台。 -->
-    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <!-- RID 由 publish 时的 -r 指定，不预声明，避免 restore 为全部 RID 拉包。 -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>JoyGame</AssemblyName>
     <RootNamespace>ProxyGame</RootNamespace>
