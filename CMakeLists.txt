@@ -124,7 +124,10 @@ if(NOT EMSCRIPTEN)
         endif()
     endif()
 
-    if(MONO_INCLUDE_DIR AND MONO_LIBRARIES AND EXISTS "${MONO_INCLUDE_DIR}")
+    # 桌面不再要求 MONO_LIBRARIES 哨兵：jcsx.c 用 LoadLibrary/dlopen 动态加载 hostfxr，
+    # 运行时与 BCL 由 runtimes/nupkg 自包含部署（见 cmake/JoySelfContained.cmake）。
+    # Android 仍必须有 libmonosgen 主库（要打进 APK 的 lib/<abi>）。
+    if(MONO_INCLUDE_DIR AND EXISTS "${MONO_INCLUDE_DIR}" AND (NOT ANDROID OR MONO_LIBRARIES))
         set(JOY_MODULE_CS ON CACHE BOOL "C# 脚本模块" FORCE)
         set_property(GLOBAL PROPERTY JOY_REQUESTED_MODULES cs)
         message(STATUS "project_proxy3d: 启用 joy C# 模块 (${JOY_CLR_PLATFORM})")
@@ -376,7 +379,9 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
     # 与 libSystem.* shim 进 APK lib/<abi>（系统加载器只从那里 dlopen .so）。
     get_filename_component(_clr_bin "${MONO_LIBRARIES}" DIRECTORY)
     set(_clr_libs "${_clr_bin}/libs")
-    if(EXISTS "${_clr_libs}/System.Private.CoreLib.dll")
+    # 只有 Android 需要仓库里的 MonoVM BCL（随 assets 解包）；桌面 BCL 由
+    # joy_deploy_selfcontained 从 runtimes/nupkg 铺到 exe 目录。
+    if(NOT ANDROID OR EXISTS "${_clr_libs}/System.Private.CoreLib.dll")
         if(ANDROID)
             set(_out_dir "${MOBILE_ASSETS_DIR}")
         else()
@@ -469,19 +474,11 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
                     COMMENT "Deploying MonoVM + CoreLib shims into ${_apk_lib}")
             endforeach()
         elseif(UNIX)
-            # Linux/macOS：libcoreclr.so|.dylib 与 CoreLib 的 P/Invoke shim (libSystem.*)
-            # 没有 DT_RUNPATH，dlopen 不会自动搜 exe 目录。拷到 exe 旁并设 rpath，
-            # 宿主侧再按 "./libSystem.*" 预加载（见 clr_host.cpp）。
-            file(GLOB _clr_native_libs
-                 "${_clr_bin}/libcoreclr.*"
-                 "${_clr_bin}/libmonosgen-2.0.*"
-                 "${_clr_bin}/libSystem.*")
-            foreach(_clr_native IN LISTS _clr_native_libs)
-                add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                            "${_clr_native}" "${_out_dir}/"
-                    COMMENT "Deploying CLR native lib ${_clr_native}")
-            endforeach()
+            # Linux/macOS 的 CLR 运行时（真 CoreCLR + BCL）由 joy_deploy_selfcontained
+            # 从 runtimes/nupkg 自包含部署到 exe 目录。
+            # 这里**不能**再拷 runtimes/<platform>/ 下的 MonoVM 主库/libSystem shim：
+            # 会把自包含的真 CoreCLR 覆盖成 MonoVM 版，hostfxr 加载后直接崩溃
+            # （此前 Linux/macOS smoke segfault 的根因）。只保留 rpath 供 SDL3 解析。
             if(APPLE)
                 set_target_properties(${EXECUTABLE_NAME} PROPERTIES
                     BUILD_RPATH "@loader_path"
