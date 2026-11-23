@@ -29,14 +29,15 @@ namespace JoyGame
         /// 保证 NativeFuncs.Initialize 与 Initialize/Update/Shutdown 在同一个
         /// AssemblyLoadContext 实例上（否则函数指针表填在 A、业务调用落在 B，全 NULL）。
         /// </summary>
-        // 桌面：hostfxr 取 UCO 函数指针直调。
+        // 桌面 UCO 入口：逻辑内联，不转调普通方法（避免 Linux/macOS
+        // CoreCLR 上 UCO wrapper 首调 JIT 的 GC transition 平台差异）。
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Bootstrap(IntPtr lookupFn)
         {
-            BootstrapMono(lookupFn);
+            Joy.NativeFuncs.Initialize(lookupFn);
         }
 
-        // Android：mono_runtime_invoke 只能调普通 public static 方法。
+        // Android 普通入口：mono_runtime_invoke 只能调普通 public static 方法。
         public static void BootstrapMono(IntPtr lookupFn)
         {
             Joy.NativeFuncs.Initialize(lookupFn);
@@ -45,7 +46,34 @@ namespace JoyGame
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Initialize(int width, int height, int smokeFrames)
         {
-            InitializeMono(width, height, smokeFrames);
+            // 调试辅助：JOY_ATTACH_DEBUGGER=1 时弹出 JIT 调试器选择（VS 需已注册为 JIT 调试器）。
+            if (Environment.GetEnvironmentVariable("JOY_ATTACH_DEBUGGER") == "1") {
+                try { System.Diagnostics.Debugger.Launch(); } catch { /* Mono 未启用调试支持时忽略 */ }
+            }
+
+            if (Environment.GetEnvironmentVariable("PROXY_PARITY") == "1")
+            {
+                Parity.Run();
+                Joy.Host.set_exit_code(0);
+                Joy.Host.quit();
+                return;
+            }
+
+            if (smokeFrames > 0)
+            {
+                _smokeState = new GameState();
+                _fixedAccumulator = 0f;
+                _frame = 0;
+                Joy.Host.log("[proxy.cs] smoke init " + smokeFrames + " frames (logic-only)");
+                return;
+            }
+
+            _app = new GameApp3D(width, height);
+            _fixedAccumulator = 0f;
+            _frame = 0;
+            LoadContent();
+            BeginPlay();
+            Joy.Host.log("[proxy.cs] 3D init " + width + "x" + height);
         }
 
         public static void InitializeMono(int width, int height, int smokeFrames)
@@ -94,7 +122,9 @@ namespace JoyGame
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Update(float dt)
         {
-            UpdateMono(dt);
+            AccumulateFixed(dt);
+
+            if (_app != null) { _app.Tick(dt); _frame++; return; }
         }
 
         public static void UpdateMono(float dt)
@@ -138,7 +168,7 @@ namespace JoyGame
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         public static void Shutdown()
         {
-            ShutdownMono();
+            Joy.Host.log("[proxy.cs] shutdown frames=" + _frame);
         }
 
         public static void ShutdownMono()
