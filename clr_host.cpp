@@ -209,10 +209,13 @@ bool clr_host_init(int argc, char* argv[])
     }
     int i = find_arg(argc, argv, "--smoke");
     if (i >= 0 && i + 1 < argc) s_smoke_frames = std::atoi(argv[i + 1]);
-    if (s_smoke_frames > 0) {
-        SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
-        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
-    } else {
+    /* 不覆盖任何平台/驱动默认：视频与渲染后端由 SDL 默认或
+     * SDL_VIDEODRIVER / SDL_RENDER_DRIVER 环境变量决定。无头环境（CI）
+     * 由调用方设 SDL_VIDEODRIVER=offscreen。
+     * 曾在这里写死 SDL_HINT_VIDEO_DRIVER="dummy"，而 SDL3 的 dummy 驱动只实现
+     * framebuffer、没有 CreateSDLWindow，SDL_CreateWindow 会调到空指针
+     * （joy 示例在 Linux CI 上就是这样 rip=0x0 崩的，见 joy/HANDOFF.md）。 */
+    if (s_smoke_frames <= 0) {
         SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, "60");
     }
 
