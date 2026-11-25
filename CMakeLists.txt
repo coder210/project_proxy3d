@@ -534,15 +534,6 @@ if(MSVC)
 endif()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT "${EXECUTABLE_NAME}")
 
-# 标准 CoreCLR 宿主调试链验证（Godot 模式的最小样本）。
-# 默认关闭，避免影响正常游戏构建；需要验证 VS F5 断 C# 时打开。
-option(PROXY_BUILD_CORELR_SMOKE "Build minimal hostfxr/CoreCLR debug smoke target" OFF)
-if(PROXY_BUILD_CORELR_SMOKE AND WIN32 AND MSVC)
-    add_subdirectory(tools/coreclr_host_smoke)
-    set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY
-        VS_STARTUP_PROJECT coreclr_host_smoke)
-endif()
-
 if(CMAKE_SYSTEM_NAME MATCHES "Darwin" AND NOT CMAKE_GENERATOR MATCHES "Xcode")
     install(TARGETS ${EXECUTABLE_NAME}
         BUNDLE DESTINATION ./install COMPONENT Runtime
