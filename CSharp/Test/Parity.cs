@@ -155,7 +155,7 @@ namespace JoyGame
                 long wallZ = Fp.Div(Fp.FromInt(llc.Layout.Obs[0].Z10), Fp.FromInt(10));
 
                 long[] caseX = { spawnX, wallX, 0 };
-                long[] caseZ = { spawnZ, wallZ, Fp.FromFloat(-25.9f) };
+                long[] caseZ = { spawnZ, wallZ, Fp.FromFloat(-15.9f) };
                 string[] caseName = { "spawn", "wall", "edge" };
 
                 for (int ci = 0; ci < 3; ++ci) {

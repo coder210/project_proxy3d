@@ -67,6 +67,7 @@ namespace JoyGame
         public byte InputMask;
         public bool AttackTriggered, BulletTriggered, RayTriggered;
         public bool ShowDebugHud = false;
+        public bool ShowCollisionBoxes = false;
 
         // 本帧真实渲染 dt（供相机平滑等表现层使用，逻辑仍走固定步）
         public float RenderDt = 1f / 60f;

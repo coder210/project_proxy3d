@@ -9,10 +9,12 @@ namespace ProxyGame.Systems
     /// </summary>
     public static class Pathfinding
     {
-        public const int GridN = MapConst.GridN;         // 64
-        public const int Cells = MapConst.Cells;         // 4096
+        public const int GridN = MapConst.GridN;         // 32
+        public const int Cells = MapConst.Cells;         // 1024
         private const int Shift = 32;                    // Q32
-        private static readonly long PF_PAD = Fp.Div(Fp.FromInt(3), Fp.FromInt(5)); // 0.6m
+        // 障碍外扩（米）。原 64×64 地图用 0.6m，但缩到 32×32 后通道仅 1~2 格宽，
+        // 任何外扩都会封死寻路栅格，故取消外扩（pad=0 时 PF 路径全部连通）。
+        private const float PF_PAD_M = 0f;
         public static readonly long PF_STEP = Fp.Div(Fp.FromInt(1), Fp.FromInt(12));
         public const int RecomputeInterval = 10;
 
@@ -32,7 +34,7 @@ namespace ProxyGame.Systems
             var walkable = new bool[Cells];
             for (int i = 0; i < Cells; ++i) walkable[i] = true;
 
-            float pad = Fp.ToFloat(PF_PAD);
+            float pad = PF_PAD_M;
             for (int k = 0; k < state.ObstacleCount; ++k)
             {
                 var o = state.Obstacles[k];
@@ -96,7 +98,7 @@ namespace ProxyGame.Systems
 
         /// <summary>
         /// 二叉堆 A*：起点/终点格 → 路径格索引序列（不含起点含终点）。
-        /// outPath 容量需 >= 4096。返回路径长度。
+        /// outPath 容量需 >= 1024。返回路径长度。
         /// </summary>
         public static int AStar(bool[] walkable, int sx, int sz, int tx, int tz,
                                 int[] outPath, int maxOut,

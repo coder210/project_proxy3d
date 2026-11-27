@@ -19,9 +19,9 @@ namespace JoyGame
         private readonly RenderMesh _meshFloorWire;
         private readonly RenderMesh _meshCube;
         private readonly RenderMesh _meshCubeWire;
-        // 实体专用分面 mesh：顶面/正面/侧面用不同亮度，避免同色纸片感
-        private readonly RenderMesh _playerTop, _playerFront, _playerSide, _meshPlayerWire;
-        private readonly RenderMesh _enemyTop, _enemyFront, _enemySide, _meshEnemyWire;
+        // 实体尺寸（对齐 C++ server.cpp/client.cpp 的 mesh 尺寸 = 碰撞体尺寸）
+        private const float PlayerW = 0.6f, PlayerH = 1.2f, PlayerD = 0.6f;
+        private const float EnemyW = 0.5f, EnemyH = 1.0f, EnemyD = 0.5f;
         private readonly RenderMesh _meshSphere;
         private readonly RenderMesh _meshQuad;
 
@@ -41,7 +41,8 @@ namespace JoyGame
         private readonly float[] _prevBZ = new float[GameConst.MaxBullets];
 
         // 相机常量：比原 C++ 更近、更倾斜，使实体能看出长方体立体感
-        private const float CamDist = 18.0f;
+        // 地图 32×32（原 64×64），相机距离减半以保持相同视野占比
+        private const float CamDist = 10.0f;
         private const float CamPitch = 55.0f * 3.14159265f / 180.0f;
 
         public Renderer3D(Jr3d r, int w, int h)
@@ -50,16 +51,12 @@ namespace JoyGame
             _w = w;
             _h = h;
 
-            // 地板 = 64x64 大平面（对齐地图尺寸）；线框稍小避免与填充完全共面
-            _meshFloor = Bindings.R3dMeshPlane(r, 64f, 64f, 1);
-            _meshFloorWire = Bindings.R3dMeshPlaneWire(r, 64f, 64f, 1);
-            // 实体基础几何体（立方体/球；quad 供 HUD 2D 用）
+            // 地板 = 32x32 大平面（对齐地图尺寸）；线框稍小避免与填充完全共面
+            _meshFloor = Bindings.R3dMeshPlane(r, 32f, 32f, 1);
+            _meshFloorWire = Bindings.R3dMeshPlaneWire(r, 32f, 32f, 1);
+            // 实体用完整 cube（6 面实心，对齐 C++ r3d_mesh_cube）+ 缩放，避免分面 mesh 缺面导致空心
             _meshCube = Bindings.R3dMeshCube(r, 1f, 1f, 1f);
             _meshCubeWire = Bindings.R3dMeshCubeWire(r, 1f, 1f, 1f);
-            MakeBoxFaces(r, 3.0f, 4.0f, 3.0f, out _playerTop, out _playerFront, out _playerSide);
-            _meshPlayerWire = Bindings.R3dMeshCubeWire(r, 3.0f, 4.0f, 3.0f);
-            MakeBoxFaces(r, 2.5f, 3.2f, 2.5f, out _enemyTop, out _enemyFront, out _enemySide);
-            _meshEnemyWire = Bindings.R3dMeshCubeWire(r, 2.5f, 3.2f, 2.5f);
             _meshSphere = Bindings.R3dMeshSphere(r, 0.5f, 12, 8);
             _meshQuad = Bindings.R3dMeshQuad(r);
 
@@ -77,41 +74,6 @@ namespace JoyGame
                 0f, 0f, sz, tz,
                 0f, 0f, 0f, 1f
             };
-        }
-
-        private static byte Shade(byte c, float f)
-        {
-            int v = (int)(c * f);
-            if (v < 0) v = 0;
-            if (v > 255) v = 255;
-            return (byte)v;
-        }
-
-        private static void MakeBoxFaces(Jr3d r, float w, float h, float d,
-            out RenderMesh top, out RenderMesh front, out RenderMesh side)
-        {
-            float hw = w * 0.5f, hh = h * 0.5f, hd = d * 0.5f;
-            float[] quad = new float[6 * 5];
-            int k = 0;
-            Action<float, float, float> v = (x, y, z) => {
-                quad[k++] = x; quad[k++] = y; quad[k++] = z;
-                quad[k++] = 0f; quad[k++] = 0f;
-            };
-
-            k = 0; // 顶面 y=+hh
-            v(-hw, hh, -hd); v(hw, hh, -hd); v(hw, hh, hd);
-            v(-hw, hh, -hd); v(hw, hh, hd); v(-hw, hh, hd);
-            top = R3dExt.MeshCustom(r, quad, 6);
-
-            k = 0; // 正面 z=-hd（相机在 -Z 一侧）
-            v(-hw, -hh, -hd); v(hw, -hh, -hd); v(hw, hh, -hd);
-            v(-hw, -hh, -hd); v(hw, hh, -hd); v(-hw, hh, -hd);
-            front = R3dExt.MeshCustom(r, quad, 6);
-
-            k = 0; // 右侧面 x=+hw
-            v(hw, -hh, -hd); v(hw, -hh, hd); v(hw, hh, hd);
-            v(hw, -hh, -hd); v(hw, hh, hd); v(hw, hh, -hd);
-            side = R3dExt.MeshCustom(r, quad, 6);
         }
 
         public void Snapshot(GameState state)
@@ -135,7 +97,9 @@ namespace JoyGame
 
         private static float Lerp(float a, float b, float t) { return a + (b - a) * t; }
 
-        public void RenderFrame(GameState state, float dt, float alpha)
+        public void RenderFrame(GameState state, float dt, float alpha,
+            bool showDebugHud = false, bool showCollisionBoxes = false,
+            VirtualControls virtualControls = null)
         {
             CameraPass(state, dt, alpha);
 
@@ -145,7 +109,10 @@ namespace JoyGame
             ObstaclePass(state);
             EntitiesPass(state, alpha);
             BulletPass(state, alpha);
-            HudPass(state);
+            if (showCollisionBoxes) CollisionDebugPass(state);
+            HudPass(state, dt);
+            if (showDebugHud) DebugHudPass(state, dt);
+            if (virtualControls != null) virtualControls.Draw(_r, _meshQuad);
 
             Bindings.R3dEnd(_r);
         }
@@ -220,8 +187,8 @@ namespace JoyGame
                 byte r = 60, g = 120, b = 220;
                 if (p.CharId == GameConst.CharGunner) { r = 60; g = 180; b = 120; }
                 else if (p.CharId == GameConst.CharAssassin) { r = 200; g = 90; b = 120; }
-                DrawEntity(x, y, z, _playerTop, _playerFront, _playerSide, _meshPlayerWire, 4.0f, r, g, b);
-                DrawHealthBar(x, y + 4.3f, z, p.Hp, p.MaxHp);
+                DrawEntity(x, y, z, PlayerW, PlayerH, PlayerD, r, g, b);
+                DrawHealthBar(x, y + 0.8f, z, p.Hp, p.MaxHp);
             }
 
             for (int i = 0; i < GameConst.MaxEnemies; i++)
@@ -231,19 +198,19 @@ namespace JoyGame
                 float x = Lerp(_prevEX[i], Fp.ToFloat(e.X), alpha);
                 float y = Lerp(_prevEY[i], Fp.ToFloat(e.Y), alpha);
                 float z = Lerp(_prevEZ[i], Fp.ToFloat(e.Z), alpha);
-                DrawEntity(x, y, z, _enemyTop, _enemyFront, _enemySide, _meshEnemyWire, 3.2f, 220, 80, 70);
-                DrawHealthBar(x, y + 3.5f, z, e.Hp, e.MaxHp);
+                DrawEntity(x, y, z, EnemyW, EnemyH, EnemyD, 220, 80, 70);
+                DrawHealthBar(x, y + 0.7f, z, e.Hp, e.MaxHp);
             }
         }
 
-        private void DrawEntity(float x, float y, float z, RenderMesh top, RenderMesh front,
-            RenderMesh side, RenderMesh wire, float height, byte cr, byte cg, byte cb)
+        private void DrawEntity(float x, float y, float z, float w, float h, float d,
+            byte cr, byte cg, byte cb)
         {
-            float[] mat = Trs(1f, 1f, 1f, x, y + height * 0.5f, z);
-            R3dExt.DrawMeshSolidBasis(_r, top, mat, Shade(cr, 1.35f), Shade(cg, 1.35f), Shade(cb, 1.35f), 255);
-            R3dExt.DrawMeshSolidBasis(_r, front, mat, cr, cg, cb, 255);
-            R3dExt.DrawMeshSolidBasis(_r, side, mat, Shade(cr, 0.65f), Shade(cg, 0.65f), Shade(cb, 0.65f), 255);
-            R3dExt.DrawWireBasis(_r, wire, mat, 0, 0, 0, 255);
+            // 完整 cube（6 面实心）按碰撞体尺寸缩放；中心对齐逻辑 (x,y,z)。
+            // C++ 原版用 r3d_mesh_cube(w,h,d) + scale(1,1,1)，这里等价（cube 为 1×1×1）。
+            float[] mat = Trs(w, h, d, x, y, z);
+            R3dExt.DrawMeshSolidBasis(_r, _meshCube, mat, cr, cg, cb, 255);
+            R3dExt.DrawWireBasis(_r, _meshCubeWire, mat, 0, 0, 0, 255);
         }
 
         private void DrawHealthBar(float x, float y, float z, int hp, int maxHp)
@@ -251,7 +218,7 @@ namespace JoyGame
             if (maxHp <= 0 || hp <= 0) return;
             float ratio = (float)hp / maxHp;
             if (ratio > 1f) ratio = 1f;
-            float fullW = 1.4f;
+            float fullW = 0.6f;
             // 底（灰）
             R3dExt.DrawMeshSolidBasis(_r, _meshQuad,
                 Trs(fullW, 0.12f, 1f, x, y, z), 60, 60, 60, 255);
@@ -281,12 +248,104 @@ namespace JoyGame
         }
 
         // ---- HUD：左上角波次/击杀/帧号 ----
-        private void HudPass(GameState state)
+        // 文本降频更新：内容每帧变化会让 r3d_font_bake 每帧新建并上传一张纹理。
+        private string _hudText = "";
+        private float _hudTextTimer;
+        private void HudPass(GameState state, float dt)
         {
             Bindings.R3dFontSetColor(_r, 30, 30, 40);
-            string text = "Wave " + state.Wave + "  Kills " + state.Kills +
-                          "  Frame " + state.Frame;
-            Bindings.R3dFontDraw2dColor(_r, _meshQuad, text, 12f, 12f, 20f, _w, _h, 30, 30, 40);
+            _hudTextTimer += dt;
+            if (_hudTextTimer >= 0.25f || _hudText.Length == 0) {
+                _hudTextTimer = 0f;
+                _hudText = "Wave " + state.Wave + "  Kills " + state.Kills +
+                           "  Frame " + state.Frame;
+            }
+            Bindings.R3dFontDraw2dColor(_r, _meshQuad, _hudText, 12f, 12f, 20f, _w, _h, 30, 30, 40);
+        }
+
+        // ---- 调试 HUD：帧号 / 逻辑 FPS / 敌人数 / 本地玩家状态（描边两遍） ----
+        // 同样降频重建文本；绘制阶段复用缓存字符串，命中 r3d 字体 LRU 缓存，不再每帧烘焙。
+        private float _fpsTimer, _fpsFrames;
+        private int _logicFps;
+        private readonly string[] _debugLines = new string[3];
+        private float _debugTextTimer;
+        private void DebugHudPass(GameState state, float dt)
+        {
+            _fpsTimer += dt; _fpsFrames++;
+            if (_fpsTimer >= 1f) {
+                _logicFps = (int)(_fpsFrames / _fpsTimer);
+                _fpsTimer = 0f; _fpsFrames = 0f;
+            }
+
+            _debugTextTimer += dt;
+            if (_debugTextTimer >= 0.1f || _debugLines[0] == null) {
+                _debugTextTimer = 0f;
+                int enemies = 0;
+                for (int i = 0; i < GameConst.MaxEnemies; i++)
+                    if (state.Enemies[i].Alive && !state.Enemies[i].Dead) enemies++;
+
+                int local = -1;
+                for (int i = 0; i < GameConst.MaxPlayers; i++)
+                    if (state.Players[i].Alive) { local = i; break; }
+
+                _debugLines[0] = "LogicFPS " + _logicFps.ToString("D3") + "   Enemies " + enemies;
+                _debugLines[1] = null;
+                _debugLines[2] = null;
+                if (local >= 0) {
+                    var p = state.Players[local];
+                    _debugLines[1] = "HP " + p.Hp + "/" + p.MaxHp + "   Pos " +
+                        Fp.ToFloat(p.X).ToString("F1") + ", " + Fp.ToFloat(p.Z).ToString("F1") +
+                        "   Conv " + p.Conv;
+                    if (p.Dead) _debugLines[2] = "Respawn " + (p.RespawnTimer / 20f).ToString("F1") + "s";
+                    else if (p.SpawnInvuln > 0) _debugLines[2] = "Invuln " + (p.SpawnInvuln / 20f).ToString("F1") + "s";
+                }
+            }
+
+            float y = 34f;
+            for (int i = 0; i < _debugLines.Length; i++) {
+                if (string.IsNullOrEmpty(_debugLines[i])) continue;
+                DrawDebugLine(_debugLines[i], y); y += 18f;
+            }
+        }
+
+        private void DrawDebugLine(string text, float y)
+        {
+            // 白底偏移 1px + 深色正文 = 描边效果（对齐模板 frame_display_pass）
+            Bindings.R3dFontDraw2dColor(_r, _meshQuad, text, 13f, y + 1f, 15f, _w, _h, 250, 250, 250);
+            Bindings.R3dFontDraw2dColor(_r, _meshQuad, text, 12f, y, 15f, _w, _h, 30, 30, 40);
+        }
+
+        // ---- 碰撞盒调试：玩家红 / 敌人橙 / 障碍绿 / 子弹蓝（线框） ----
+        private void CollisionDebugPass(GameState state)
+        {
+            for (int i = 0; i < GameConst.MaxPlayers; i++) {
+                var p = state.Players[i];
+                if (!p.Alive) continue;
+                float w = Fp.ToFloat(p.ColHx) * 2f, h = Fp.ToFloat(p.ColHy) * 2f, d = Fp.ToFloat(p.ColHz) * 2f;
+                R3dExt.DrawWireBasis(_r, _meshCubeWire,
+                    Trs(w, h, d, Fp.ToFloat(p.X), Fp.ToFloat(p.Y), Fp.ToFloat(p.Z)), 230, 50, 50, 255);
+            }
+            for (int i = 0; i < GameConst.MaxEnemies; i++) {
+                var e = state.Enemies[i];
+                if (!e.Alive || e.Dead) continue;
+                float w = Fp.ToFloat(e.ColHx) * 2f, h = Fp.ToFloat(e.ColHy) * 2f, d = Fp.ToFloat(e.ColHz) * 2f;
+                R3dExt.DrawWireBasis(_r, _meshCubeWire,
+                    Trs(w, h, d, Fp.ToFloat(e.X), Fp.ToFloat(e.Y), Fp.ToFloat(e.Z)), 240, 160, 40, 255);
+            }
+            for (int i = 0; i < state.ObstacleCount; i++) {
+                var o = state.Obstacles[i];
+                float w = Fp.ToFloat(o.Hx) * 2f, h = Fp.ToFloat(o.Sy), d = Fp.ToFloat(o.Hz) * 2f;
+                R3dExt.DrawWireBasis(_r, _meshCubeWire,
+                    Trs(w, h, d, Fp.ToFloat(o.X), Fp.ToFloat(o.Y), Fp.ToFloat(o.Z)), 50, 200, 95, 255);
+            }
+            const float r = 0.15f;
+            for (int i = 0; i < GameConst.MaxBullets; i++) {
+                var b = state.Bullets[i];
+                if (!b.Alive) continue;
+                R3dExt.DrawWireBasis(_r, _meshCubeWire,
+                    Trs(r * 2f, r * 2f, r * 2f, Fp.ToFloat(b.X), Fp.ToFloat(b.Y), Fp.ToFloat(b.Z)),
+                    60, 190, 255, 255);
+            }
         }
     }
 }

@@ -95,6 +95,7 @@ namespace ProxyGame
         // PathComponent（ai_system 写目标格并置 dirty，pathfinding 消费）
         public int PathTargetGx, PathTargetGz;
         public bool PathDirty;
+        public int PathLen, NextIdx, RecomputeCooldown;  // 路径进度（复刻 pathfinding_system）
 
         // ColliderComponent（项目里玩家/敌人均为 BOX，half_size 米→fp）
         public byte ColliderType;         // 0=NONE 1=BOX 2=SPHERE 3=OBB 4=MESH
@@ -180,6 +181,17 @@ namespace ProxyGame
         public readonly Obstacle[] Obstacles = new Obstacle[MapConst.MaxObs];
         public int ObstacleCount = 0;
 
+        // A* 寻路工作区（复刻 GlobalState::astar_work + PathComponent::path，常驻避免每帧分配）
+        public readonly int[][] EnemyPaths = new int[GameConst.MaxEnemies][];
+        public readonly bool[] PfWalkable = new bool[MapConst.Cells];
+        public readonly int[] PfGScore = new int[MapConst.Cells];
+        public readonly int[] PfFScore = new int[MapConst.Cells];
+        public readonly int[] PfCame = new int[MapConst.Cells];
+        public readonly int[] PfHeap = new int[MapConst.Cells];
+        public readonly bool[] PfClosed = new bool[MapConst.Cells];
+        public readonly bool[] PfInOpen = new bool[MapConst.Cells];
+        public bool PfWalkableDirty = true;
+
         public int NextEntityId = 1;
         public int Frame = 0;
         public int Wave = 0;
@@ -199,6 +211,7 @@ namespace ProxyGame
         public GameState()
         {
             InitCharacters();
+            for (int i = 0; i < EnemyPaths.Length; ++i) EnemyPaths[i] = new int[MapConst.Cells];
         }
 
         private void InitCharacters()
@@ -240,6 +253,7 @@ namespace ProxyGame
             Net.NumJoins = 0;
             Net.NumLeaves = 0;
             Net.NumInputs = 0;
+            PfWalkableDirty = true;
         }
     }
 }

@@ -51,6 +51,7 @@ namespace ProxyGame.Systems
                 e.AiState = en.AiState;
                 e.AiTargetX = en.TargetX; e.AiTargetZ = en.TargetZ;
                 e.PfTargetGx = en.PathTargetGx; e.PfTargetGz = en.PathTargetGz;
+                e.PfPathLen = en.PathLen; e.PfNextIdx = en.NextIdx; e.PfRecomputeCd = en.RecomputeCooldown;
                 outEntities[ec++] = e;
             }
 

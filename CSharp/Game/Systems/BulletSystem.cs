@@ -66,7 +66,13 @@ namespace ProxyGame.Systems
                         {
                             t.Hp -= b.Damage;
                             if (t.Hp < 0) t.Hp = 0;
-                            if (t.Hp <= 0 && !t.Dead) t.Dead = true;
+                            bool kill = t.Hp <= 0 && !t.Dead;
+                            if (kill) t.Dead = true;
+                            if (!kill) {
+                                t.KnockVx = Fp.Mul(b.DX, KNOCKBACK_SPEED);
+                                t.KnockVz = Fp.Mul(b.DZ, KNOCKBACK_SPEED);
+                                t.KnockTicksLeft = KNOCKBACK_TICKS;
+                            }
                             state.Players[pi] = t;
                             hit = true;
                         }

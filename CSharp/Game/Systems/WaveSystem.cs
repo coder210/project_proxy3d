@@ -25,6 +25,7 @@ namespace ProxyGame.Systems
             int nextId = 10000;
             state.ObstacleCount = 0;
             Pathfinding.BuildObstaclesFromLayout(state, ll.Layout, ref nextId);
+            state.PfWalkableDirty = true;   // 障碍已重建，寻路栅格需重算
 
             // 玩家全部重定位到新关出生点（level_player_spawn，纯函数双端一致）
             MapData.PlayerSpawn(newLevel, out long fx, out long fz);
@@ -38,7 +39,9 @@ namespace ProxyGame.Systems
             }
 
             // 刷第一批敌（单波清场，直接生成，不再走延迟）；内部会设置 Wave=1
-            return WaveSpawnSystem.SpawnLevel(state, newLevel);
+            int spawned = WaveSpawnSystem.SpawnLevel(state, newLevel);
+            Joy.Host.log("[wave] level=" + newLevel + " spawned=" + spawned + " obstacles=" + state.ObstacleCount);
+            return spawned;
         }
 
         /// <summary>单关推进（对应 wave_system）：开局建关 / 战斗不动作 / 清场置位。</summary>

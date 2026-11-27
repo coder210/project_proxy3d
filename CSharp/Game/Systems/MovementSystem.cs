@@ -9,13 +9,13 @@ namespace ProxyGame.Systems
     /// </summary>
     public static class MovementSystem
     {
-        // 常量（movement_system.h:16-24；PF_GRID_OFFSET=32）
+        // 常量（movement_system.h:16-24；PF_GRID_OFFSET=16，地图 32×32）
         private static readonly long GRAVITY = Fp.FromFloat(9.8f);
         private static readonly long JUMP_SPEED = Fp.FromFloat(4.0f);
         private static readonly long GROUND_Y = Fp.FromFloat(0.6f);
         private static readonly long WALL_HALF = Fp.Div(Fp.FromInt(1), Fp.FromInt(2));
-        private static readonly long WALL_LIMIT = Fp.Sub(Fp.FromInt(32), WALL_HALF);    // +31.5
-        private static readonly long WALL_NEG = Fp.Sub(Fp.FromInt(-32), -WALL_HALF);    // -31.5
+        private static readonly long WALL_LIMIT = Fp.Sub(Fp.FromInt(16), WALL_HALF);    // +15.5
+        private static readonly long WALL_NEG = Fp.Sub(Fp.FromInt(-16), -WALL_HALF);    // -15.5
 
         // 输入位（protocol.h:14-17）
         private const byte INPUT_UP = 1, INPUT_DOWN = 2, INPUT_LEFT = 4, INPUT_RIGHT = 8;

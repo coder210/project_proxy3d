@@ -5,11 +5,11 @@ namespace ProxyGame
     // 坐标常量（pathfinding_component.h / procedural_map.h）
     public static class MapConst
     {
-        public const int GridN = 64;
-        public const int GridMin = -32;
-        public const int GridOffset = 32;   // -GridMin
+        public const int GridN = 32;
+        public const int GridMin = -16;
+        public const int GridOffset = 16;   // -GridMin
         public const int Cells = GridN * GridN;
-        public const int MaxObs = 4096;
+        public const int MaxObs = 1024;
         public const int EnemySpawnCount = 2;
         public const int WaveMaxEnemies = 64;
         public static readonly int[] LevelEnemyCount = { 8, 8, 8, 8, 8 };

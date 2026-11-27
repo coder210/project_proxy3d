@@ -12,6 +12,10 @@ namespace ProxyGame.Systems
     /// </summary>
     public static class WaveSpawnSystem
     {
+        // 调试开关：限制每关最多生成 1 个敌人（原版每关 8 个）。
+        // 设为 0 可完全关闭敌人生成；改回 64 恢复原版行为。
+        public const int DebugMaxEnemies = 1;
+
         /// <summary>准备整波敌人的出生格与类型索引（不创建实体），返回生成数量。</summary>
         public static int PrepareEnemies(GameState state, int level, int[] tiles, int[] si)
         {
@@ -56,6 +60,9 @@ namespace ProxyGame.Systems
                 MaxHp = GameConst.EnemyMaxHp,
                 SpawnIdx = si,
                 SpawnX = fx, SpawnY = 0, SpawnZ = fz,
+                // ColliderComponent（对齐 C++ enemy_reset：BOX 0.35×1.8×0.35）
+                ColliderType = ColliderType.Box,
+                ColHx = Fp.FromFloat(0.35f), ColHy = Fp.FromFloat(0.9f), ColHz = Fp.FromFloat(0.35f),
                 // AI：home = 实际出生点，半径由 SpawnDef 转 fp
                 PatrolCenterX = fx, PatrolCenterZ = fz,
                 TargetX = fx, TargetZ = fz,
@@ -78,6 +85,7 @@ namespace ProxyGame.Systems
             var tiles = new int[MapConst.WaveMaxEnemies];
             var si = new int[MapConst.WaveMaxEnemies];
             int got = PrepareEnemies(state, level, tiles, si);
+            if (got > DebugMaxEnemies) got = DebugMaxEnemies;
             for (int i = 0; i < got; ++i) SpawnEnemy(state, i, tiles[i], si[i]);
             state.Wave = 1;
             return got;
