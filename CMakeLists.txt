@@ -376,7 +376,11 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
         # 那里探测 libhostfxr.dylib；放到 <cfg> 根会探测失败并退回
         # framework-dependent 模式，再尝试加载不存在的 hostfxr.dll。
         if(APPLE)
-            set(_cs_runtime_dir "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>")
+            # 不能用 $<TARGET_FILE_DIR:${EXECUTABLE_NAME}>：那会让 _sc_deploy
+            # 反向依赖 executable，而 executable 已依赖 _cs_deploy，形成依赖环。
+            # 这里按 bundle 布局显式拼路径，二者指向同一目录但没有 target 依赖。
+            set(_cs_runtime_dir
+                "${CMAKE_BINARY_DIR}/$<CONFIGURATION>/${EXECUTABLE_NAME}.app/Contents/MacOS")
         else()
             set(_cs_runtime_dir "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
         endif()
