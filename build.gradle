@@ -20,8 +20,8 @@ android {
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_APP_PLATFORM=android-16", "-DANDROID_STL=c++_static", "-DCMAKE_VERBOSE_MAKEFILE=ON", "-DMOBILE_ASSETS_DIR=${System.getProperty("user.dir")}/app/src/main/assets"
-                // abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
-                // abiFilters 'arm64-v8a'
+                // MonoVM 运行时只暂存 arm64；其他 ABI 会打入 arm64 的 .so，dlopen 失败闪退。
+                abiFilters 'arm64-v8a'
             }
         }
     }
@@ -32,8 +32,12 @@ android {
         }
     }
     applicationVariants.all { variant ->
-        tasks["merge${variant.name.capitalize()}Assets"]
-                .dependsOn("externalNativeBuild${variant.name.capitalize()}")
+        def cap = variant.name.capitalize()
+        // CMake 的 POST_BUILD 把 MonoVM/libSystem shims 拷进 app/libs/<abi>，
+        // 必须发生在 merge 之前，否则 APK 里没有这些 .so，启动 dlopen 失败闪退。
+        tasks["merge${cap}Assets"].dependsOn("externalNativeBuild${cap}")
+        tasks["merge${cap}JniLibFolders"].dependsOn("externalNativeBuild${cap}")
+        tasks["merge${cap}NativeLibs"].dependsOn("externalNativeBuild${cap}")
     }
     if (!project.hasProperty('EXCLUDE_NATIVE_LIBS')) {
         sourceSets.main {

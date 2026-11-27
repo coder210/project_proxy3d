@@ -134,6 +134,37 @@ jobs:
           done
           exit "$rc"
 
+      - name: Verify APK contents (startup-critical files)
+        run: |
+          set -euo pipefail
+          apk="third_party/joy/SDL/android-project/app/build/outputs/apk/debug/project_proxy3d-debug.apk"
+          test -f "$apk" || { echo "::error::APK not found: $apk"; exit 1; }
+          echo "APK size: $(stat -c%s "$apk") bytes"
+
+          # 列出 APK 条目，校验启动必需文件都在。曾出现「构建成功但装上闪退」：
+          # libmonosgen/libSystem shim 被拷到 app/src/libs（Gradle 不认），
+          # 结果 .so 根本没进 APK，jcsx.c dlopen 失败 → Activity 立即结束。
+          unzip -l "$apk" > apk-contents.txt
+          fail=0
+          check() {
+            if grep -q "$1" apk-contents.txt; then
+              echo "  OK  $1"
+            else
+              echo "::error::APK missing $1"; fail=1
+            fi
+          }
+          check 'lib/arm64-v8a/libmonosgen-2.0.so'
+          check 'lib/arm64-v8a/libSystem.Native.so'
+          check 'assets/JoyGame.dll'
+          check 'assets/lib/System.Private.CoreLib.dll'
+          check 'assets/lib/Joy.Bindings.dll'
+          # 不能混入其他 ABI：MonoVM 运行时只有 arm64，混入即 dlopen 失败
+          if grep -qE 'lib/(armeabi-v7a|x86|x86_64)/' apk-contents.txt; then
+            echo "::error::APK contains non-arm64 native libs (MonoVM runtime is arm64-only)"; fail=1
+          fi
+          [ "$fail" -eq 0 ] || { echo "::error::APK content verification failed"; exit 1; }
+          echo "APK content verification passed"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

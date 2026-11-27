@@ -170,7 +170,11 @@ message(STATUS "EXECUTABLE_NAME = '${EXECUTABLE_NAME}'")
 
 # 如果是 Android，必须命名为 main
 if (ANDROID)
-    set(MOBILE_ASSETS_DIR "${MOBILE_MAIN_DIR}/assets")
+    # build.gradle 总是传 MOBILE_ASSETS_DIR；只有它缺失时才从 MOBILE_MAIN_DIR 推导。
+    # 此前无条件覆盖会让本地 Android Studio 构建（无 MOBILE_MAIN_DIR）得到 "/assets"。
+    if(NOT MOBILE_ASSETS_DIR AND MOBILE_MAIN_DIR)
+        set(MOBILE_ASSETS_DIR "${MOBILE_MAIN_DIR}/assets")
+    endif()
     message(STATUS "MOBILE_ASSETS_DIR = '${MOBILE_ASSETS_DIR}'")
     set(EXECUTABLE_NAME main)
     add_library(${EXECUTABLE_NAME} SHARED)
@@ -334,6 +338,14 @@ set_target_properties(${EXECUTABLE_NAME} PROPERTIES
 # ------------------- C# 脚本模块：构建与运行时部署（同 examples/csharp_host） -------------------
 # 仅当 C# 模块真正启用（CLR 探测成功、joy::all 含真胶水而非空桩）时才构建/部署。
 if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
+    # 启动闪退诊断：开启后 joy 的 jcsx.c 在 Android 上逐阶段弹窗（jprobe.h），
+    # 最后弹出的编号即崩溃点。默认关闭，正常构建不受影响。
+    option(JOY_BOOT_PROBE "Enable Android boot-stage message-box probe" OFF)
+    if(JOY_BOOT_PROBE)
+        target_compile_definitions(joy_module_cs PRIVATE JOY_ENABLE_BOOT_PROBE)
+        message(STATUS "project_proxy3d: Android boot probe ENABLED")
+    endif()
+
     # IDE 里按 joy 真实目录树分组注入的引擎源码（source_group 只在当前目录生效）
     joy_ide_source_groups()
 
@@ -488,15 +500,38 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
             # APK 只把 lib/<abi>/*.so 解压为可加载库，assets/ 是压缩数据，
             # 系统加载器找不到。MonoVM 主库 + libSystem.* shim 必须进 APK 的
             # lib/<abi>；缺任一 shim，CoreLib 首次 JIT 的 P/Invoke 会闪退。
-            # Gradle 的 jniLibs.srcDir 指向 app/libs，故同时落到 app/libs/<abi>；
-            # 再拷一份到构建树 lib/<abi>（与 joy examples 的打包约定一致）。
+            # Gradle 的 jniLibs.srcDir 'libs' 相对 app 模块根，故必须落到
+            # app/libs/<abi>。此前用 MOBILE_MAIN_DIR/.. 只到 app/src，写进
+            # app/src/libs/<abi>，Gradle 根本不打包 → 装上就闪退。
             file(GLOB _clr_shims "${_clr_bin}/libSystem.*.so")
             set(_clr_so_files "${MONO_LIBRARIES}" ${_clr_shims})
-            set(_apk_libs "${CMAKE_BINARY_DIR}/lib/${ANDROID_ABI}")
-            if(MOBILE_MAIN_DIR)
-                get_filename_component(_gradle_app_dir "${MOBILE_MAIN_DIR}/.." ABSOLUTE)
-                list(APPEND _apk_libs "${_gradle_app_dir}/libs/${ANDROID_ABI}")
+
+            # ABI 校验：MonoVM 运行时只暂存了 arm64，其他 ABI 若混入 arm64 的
+            # .so，启动时 dlopen 会失败。本项目 APK 只出 arm64-v8a。
+            if(NOT ANDROID_ABI STREQUAL "arm64-v8a")
+                message(FATAL_ERROR
+                    "project_proxy3d: Android MonoVM 只暂存 arm64-v8a，当前 ABI='${ANDROID_ABI}'"
+                    " 会导致 libmonosgen-2.0.so 架构不符而闪退；请只在 abiFilters 里保留 arm64-v8a。")
             endif()
+            # 运行时内容校验：缺主库或 shim 时早失败，别等装上才闪退。
+            if(NOT EXISTS "${MONO_LIBRARIES}")
+                message(FATAL_ERROR "project_proxy3d: MonoVM 主库缺失: ${MONO_LIBRARIES}")
+            endif()
+            if(NOT _clr_shims)
+                message(FATAL_ERROR "project_proxy3d: 未找到 libSystem.*.so shims (in ${_clr_bin})")
+            endif()
+
+            set(_apk_libs "${CMAKE_BINARY_DIR}/lib/${ANDROID_ABI}")
+            # app 模块根：从 MOBILE_MAIN_DIR(app/src/main) 上两级，或从
+            # MOBILE_ASSETS_DIR(app/src/main/assets) 上三级；本地 Android Studio
+            # 构建不传 MOBILE_MAIN_DIR 时走后者。
+            if(MOBILE_MAIN_DIR)
+                get_filename_component(_gradle_app_dir "${MOBILE_MAIN_DIR}/../.." ABSOLUTE)
+            else()
+                get_filename_component(_gradle_app_dir "${MOBILE_ASSETS_DIR}/../../.." ABSOLUTE)
+            endif()
+            list(APPEND _apk_libs "${_gradle_app_dir}/libs/${ANDROID_ABI}")
+            message(STATUS "APK native libs dir: ${_gradle_app_dir}/libs/${ANDROID_ABI}")
             foreach(_apk_lib IN LISTS _apk_libs)
                 add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E make_directory "${_apk_lib}"

@@ -218,6 +218,10 @@ bool clr_host_init(int argc, char* argv[])
     if (s_smoke_frames <= 0) {
         SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, "60");
     }
+#if defined(__ANDROID__)
+    /* 与 joy 示例一致：锁定横屏，避免 Activity 在启动阶段因方向变化重建 */
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#endif
 
     /* C# 调试：运行时为 hostfxr 启动的真 CoreCLR，ICorDebug 诊断通道由
      * DOTNET_EnableDiagnostics=1 激活（见 CMake 生成的 .vcxproj 调试环境），
@@ -233,6 +237,9 @@ bool clr_host_init(int argc, char* argv[])
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[cs] load assembly failed");
         return false;
     }
+    /* 主仓入口契约：JoyEntry 只做 Bootstrap，生命周期仍在 GameApplication
+     * （见 CSharp/Runtime/JoyEntry.cs）。joy 示例把生命周期搬到了 JoyEntry.On*，
+     * 与本仓 DLL 不同，不要照抄，否则 csx_find_method 返回 NULL 直接闪退。 */
     s_on_init = csx_find_method(s_csx, "JoyGame", "GameApplication", "Initialize", 3);
     s_on_frame = csx_find_method(s_csx, "JoyGame", "GameApplication", "Update", 1);
     s_on_shutdown = csx_find_method(s_csx, "JoyGame", "GameApplication", "Shutdown", 0);
