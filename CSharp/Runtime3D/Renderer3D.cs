@@ -19,6 +19,10 @@ namespace JoyGame
         private readonly RenderMesh _meshFloorWire;
         private readonly RenderMesh _meshCube;
         private readonly RenderMesh _meshCubeWire;
+        // lit 网格（pos+normal+uv）：光照管线按法线算明暗，纯色管线做不到
+        private readonly RenderMesh _meshCubeLit;
+        private readonly RenderMesh _meshSphereLit;
+        private readonly RenderMesh _meshPlaneLit;
         // 实体尺寸（对齐 C++ server.cpp/client.cpp 的 mesh 尺寸 = 碰撞体尺寸）
         private const float PlayerW = 0.6f, PlayerH = 1.2f, PlayerD = 0.6f;
         private const float EnemyW = 0.5f, EnemyH = 1.0f, EnemyD = 0.5f;
@@ -59,6 +63,11 @@ namespace JoyGame
             _meshCubeWire = Bindings.R3dMeshCubeWire(r, 1f, 1f, 1f);
             _meshSphere = Bindings.R3dMeshSphere(r, 0.5f, 12, 8);
             _meshQuad = Bindings.R3dMeshQuad(r);
+            // lit 版本：pos+normal+uv 网格。光照管线由引擎在 r3d 创建时
+            // 自动启用（检测到 shaders/lighting.*.spv），这里只建网格。
+            _meshCubeLit = R3dExt.MeshLitCube(r, 1f, 1f, 1f);
+            _meshSphereLit = R3dExt.MeshLitSphere(r, 0.5f, 12, 8);
+            _meshPlaneLit = R3dExt.MeshLitPlane(r, 32f, 32f, 1);
 
             Bindings.R3dFontInit(r, "fonts/simhei.ttf", 24);
         }
@@ -150,10 +159,10 @@ namespace JoyGame
                 0f, 1f, 0f, 60f);
         }
 
-        // ---- floor_pass：浅灰填充 + 网格线（下沉 0.05 防 z-fighting）----
+        // ---- floor_pass：浅灰 lit 填充 + 网格线（下沉 0.05 防 z-fighting）----
         private void FloorPass()
         {
-            R3dExt.DrawMeshSolidBasis(_r, _meshFloor,
+            R3dExt.DrawMeshLitColor(_r, _meshPlaneLit,
                 Trs(1f, 1f, 1f, 0f, -0.05f, 0f), 228, 228, 232, 255);
             R3dExt.DrawWireBasis(_r, _meshFloorWire,
                 Trs(1f, 1f, 1f, 0f, -0.05f, 0f), 205, 205, 212, 255);
@@ -169,7 +178,7 @@ namespace JoyGame
                 float sx = Fp.ToFloat(o.Hx) * 2f, sz = Fp.ToFloat(o.Hz) * 2f;
                 float sy = Fp.ToFloat(o.Sy);
                 float[] mat = Trs(sx, sy, sz, cx, sy * 0.5f, cz);
-                R3dExt.DrawMeshSolidBasis(_r, _meshCube, mat, 150, 160, 175, 255);
+                R3dExt.DrawMeshLitColor(_r, _meshCubeLit, mat, 150, 160, 175, 255);
                 R3dExt.DrawWireBasis(_r, _meshCubeWire, mat, 90, 100, 120, 255);
             }
         }
@@ -209,7 +218,7 @@ namespace JoyGame
             // 完整 cube（6 面实心）按碰撞体尺寸缩放；中心对齐逻辑 (x,y,z)。
             // C++ 原版用 r3d_mesh_cube(w,h,d) + scale(1,1,1)，这里等价（cube 为 1×1×1）。
             float[] mat = Trs(w, h, d, x, y, z);
-            R3dExt.DrawMeshSolidBasis(_r, _meshCube, mat, cr, cg, cb, 255);
+            R3dExt.DrawMeshLitColor(_r, _meshCubeLit, mat, cr, cg, cb, 255);
             R3dExt.DrawWireBasis(_r, _meshCubeWire, mat, 0, 0, 0, 255);
         }
 
@@ -241,9 +250,9 @@ namespace JoyGame
                 float z = Lerp(_prevBZ[i], Fp.ToFloat(b.Z), alpha);
                 float[] mat = Trs(0.25f, 0.25f, 0.25f, x, y + 0.8f, z);
                 if (b.FromEnemy)
-                    R3dExt.DrawMeshSolidBasis(_r, _meshSphere, mat, 230, 60, 60, 255);
+                    R3dExt.DrawMeshLitColor(_r, _meshSphereLit, mat, 230, 60, 60, 255);
                 else
-                    R3dExt.DrawMeshSolidBasis(_r, _meshSphere, mat, 255, 220, 60, 255);
+                    R3dExt.DrawMeshLitColor(_r, _meshSphereLit, mat, 255, 220, 60, 255);
             }
         }
 
