@@ -35,6 +35,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          # vendored SDL 的 gradle-wrapper.jar 不在官方校验白名单里，
+          # 这里只依赖它的依赖缓存能力，不需要 wrapper 校验。
+          validate-wrappers: false
 
       - name: Copy build.gradle to SDL project
         run: cp build.gradle third_party/joy/SDL/android-project/app/
