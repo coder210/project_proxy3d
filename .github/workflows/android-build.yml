@@ -27,6 +27,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # Maven Central 对 GitHub Actions 共享出口 IP 限流（HTTP 429）。AGP 的
+      # 第三方传递依赖（protobuf/gson/guava/grpc...）只在 Maven Central，
+      # Google Maven 没有。缓存 Gradle 依赖：首次成功后后续 run 从缓存读，
+      # 不再请求 Maven Central。
+      - name: Setup Gradle (dependency cache)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
       - name: Copy build.gradle to SDL project
         run: cp build.gradle third_party/joy/SDL/android-project/app/
 
@@ -97,7 +106,30 @@ jobs:
         run: |
           cd third_party/joy/SDL/android-project/
           chmod +x gradlew
-          ./gradlew assembleDebug -PtargetName=project_proxy3d -PappDisplayName="Project Proxy 3D"
+
+          # root build.gradle 的 buildscript/allprojects 都是 mavenCentral()，
+          # 对 GitHub Actions 出口 IP 会 429。AGP 自身的依赖在 google()，
+          # 第三方传递依赖只在 Maven Central —— 换成它的完整镜像。
+          # 只改 checkout 出来的副本，不动仓库文件。
+          n=$(grep -c 'mavenCentral()' build.gradle || true)
+          [ "$n" -eq 2 ] || { echo "::error::expected 2 mavenCentral() in root build.gradle, found $n"; exit 1; }
+          sed -i "s#mavenCentral()#maven { url 'https://maven.aliyun.com/repository/public' }#g" build.gradle
+          grep -n 'maven\|google' build.gradle
+
+          # 镜像偶发抖动时重试；已下载的依赖留在 Gradle 缓存，重试只补失败项。
+          rc=1
+          for attempt in 1 2 3 4; do
+            echo "--- gradlew assembleDebug (attempt $attempt) ---"
+            ./gradlew assembleDebug -PtargetName=project_proxy3d -PappDisplayName="Project Proxy 3D"
+            rc=$?
+            [ "$rc" -eq 0 ] && break
+            if [ "$attempt" -lt 4 ]; then
+              delay=$((attempt * 40))
+              echo "::warning::gradlew failed ($rc), retrying in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          exit "$rc"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
