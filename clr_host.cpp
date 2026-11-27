@@ -169,6 +169,14 @@ static bool setup_clr_dirs()
  * 已是 exe 目录，直接拼该目录下的 vk_swiftshader_icd.json 绝对路径。 */
 static void setup_vulkan_dirs()
 {
+#if defined(__ANDROID__)
+    /* Android 必须用系统 Vulkan loader（libvulkan.so + 设备 ICD）。
+     * 这里若设 VK_ICD_FILENAMES 指向桌面 SwiftShader 的 json，Android 上
+     * cwd 通常是 "/" 且该 json 根本没随 APK 部署，SDL 会只找这个不存在的
+     * ICD → GPU 设备创建失败 → R3dCreate 返回 null → C# 抛异常被 mono 吞掉
+     * → 每帧不绘制，表现为「不闪退但黑屏」。参考 E:/project_proxy3d 未设此变量。 */
+    return;
+#else
     char cwd[1024];
     if (!getcwd(cwd, sizeof(cwd))) return;
     char sep =
@@ -185,6 +193,7 @@ static void setup_vulkan_dirs()
     setenv("VK_ICD_FILENAMES", icd, 1);
 #endif
     SDL_Log("[cs] VK_ICD_FILENAMES=%s", icd);
+#endif
 }
 
 bool clr_host_init(int argc, char* argv[])

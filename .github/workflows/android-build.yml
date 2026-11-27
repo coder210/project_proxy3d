@@ -158,6 +158,11 @@ jobs:
           check 'assets/JoyGame.dll'
           check 'assets/lib/System.Private.CoreLib.dll'
           check 'assets/lib/Joy.Bindings.dll'
+          # r3d_create 从 assets/shaders 读 vert/frag.spv；缺了会返回 NULL，
+          # C# 抛异常被 mono 吞掉 → 黑屏（不是闪退），所以这里必须校验。
+          check 'assets/shaders/vert.spv'
+          check 'assets/shaders/frag.spv'
+          check 'assets/fonts/simhei.ttf'
           # 不能混入其他 ABI：MonoVM 运行时只有 arm64，混入即 dlopen 失败
           if grep -qE 'lib/(armeabi-v7a|x86|x86_64)/' apk-contents.txt; then
             echo "::error::APK contains non-arm64 native libs (MonoVM runtime is arm64-only)"; fail=1
