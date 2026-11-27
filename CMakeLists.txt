@@ -119,6 +119,17 @@ if(NOT EMSCRIPTEN)
             get_filename_component(_fxr_host2 "${_fxr_host}" DIRECTORY)          # .../host
             get_filename_component(JOY_DOTNET_ROOT "${_fxr_host2}" DIRECTORY)    # <root>
         endif()
+    elseif(APPLE AND NOT ANDROID)
+        if(NOT JOY_HOSTFXR_DLL)
+            file(GLOB _hostfxr_candidates
+                "/usr/local/share/dotnet/host/fxr/*/libhostfxr.dylib"
+                "/usr/share/dotnet/host/fxr/*/libhostfxr.dylib"
+                "$ENV{DOTNET_ROOT}/host/fxr/*/libhostfxr.dylib"
+                "${_clr_plat}/libhostfxr.dylib")
+            if(_hostfxr_candidates)
+                list(GET _hostfxr_candidates -1 JOY_HOSTFXR_DLL)
+            endif()
+        endif()
     elseif(UNIX AND NOT ANDROID)
         if(NOT JOY_HOSTFXR_DLL)
             file(GLOB _hostfxr_candidates
@@ -360,7 +371,15 @@ if(JOY_MODULE_CS AND TARGET joy_module_cs AND NOT EMSCRIPTEN)
             DEPENDS project_proxy3d_cs_managed
             COMMENT "Syncing JoyGame.dll/pdb to runtime directory")
     else()
-        set(_cs_runtime_dir "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+        # macOS 是 .app bundle，exe 实际在 <cfg>/<name>.app/Contents/MacOS/。
+        # 运行时必须部署到 exe 同目录：宿主会把 CWD 对齐到 exe 目录，jcsx.c 从
+        # 那里探测 libhostfxr.dylib；放到 <cfg> 根会探测失败并退回
+        # framework-dependent 模式，再尝试加载不存在的 hostfxr.dll。
+        if(APPLE)
+            set(_cs_runtime_dir "$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>")
+        else()
+            set(_cs_runtime_dir "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+        endif()
         get_filename_component(_joy_cmake_dir "${JOY_ADD_CMAKE}" DIRECTORY)
         include(${_joy_cmake_dir}/cmake/JoySelfContained.cmake)
         joy_deploy_selfcontained(${EXECUTABLE_NAME} "${_cs_proj}" "${_cs_out}"

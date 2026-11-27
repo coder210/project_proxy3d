@@ -116,13 +116,17 @@ jobs:
           ( cd "$GITHUB_WORKSPACE" && "./$exe" --smoke 60 ) 2>&1 | tee smoke.log
           grep -Fq 'smoke finished' smoke.log \
             || { echo "::error::project_proxy3d smoke did not finish"; exit 1; }
-          # 自包含部署：确认运行时随包（hostfxr/coreclr + 裁剪后的 BCL），玩家无需装 .NET。
+          # 自包含部署：确认运行时随包（hostfxr/coreclr + 完整 BCL），玩家无需装 .NET。
           grep -Fq 'command-line mode' smoke.log \
             || { echo "::error::did not load self-contained CoreCLR (command-line mode)"; exit 1; }
           if [ "$RUNNER_OS" != "macOS" ]; then
+            # 桌面**不裁剪** BCL：曾按白名单裁到 48.6MB，但缺口只在特定平台路径暴露
+            # （Linux 的 Console 要 Microsoft.Win32.Primitives，Windows 走不到），只能靠 CI 试。
             bcl=$(find "$out" -maxdepth 1 -name 'System.*.dll' | wc -l)
-            echo "deployed BCL count: $bcl (whitelist ~29, not full 161)"
-            [ "$bcl" -lt 60 ] || { echo "::error::BCL not pruned (found $bcl)"; exit 1; }
+            echo "deployed BCL count: $bcl (expect >= 100; desktop is not pruned)"
+            [ "$bcl" -ge 100 ] || { echo "::error::BCL incomplete ($bcl) — pruning must stay disabled"; exit 1; }
+            test -e "$out/Microsoft.Win32.Primitives.dll" \
+              || { echo "::error::missing Microsoft.Win32.Primitives.dll (BCL pruned again?)"; exit 1; }
           fi
 
       - name: Ad-Hoc Codesign (macOS)

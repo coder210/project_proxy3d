@@ -221,8 +221,7 @@ bool clr_host_init(int argc, char* argv[])
 
     /* C# 调试：运行时为 hostfxr 启动的真 CoreCLR，ICorDebug 诊断通道由
      * DOTNET_EnableDiagnostics=1 激活（见 CMake 生成的 .vcxproj 调试环境），
-     * VS 用 NativeWithManagedCore 引擎 F5 即可附加，见 docs/csharp-debugging.md。
-     * 旧的 Mono 软调试代理（PROXY_DEBUG_CSHARP / 22222）已随迁移废弃。 */
+     * VS 用 NativeWithManagedCore 引擎 F5 即可附加。 */
 
     SDL_Log("[cs] creating CoreCLR, assembly=JoyGame.dll");
     s_csx = csx_create();
