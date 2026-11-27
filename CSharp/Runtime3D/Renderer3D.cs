@@ -23,6 +23,11 @@ namespace JoyGame
         private readonly RenderMesh _meshCubeLit;
         private readonly RenderMesh _meshSphereLit;
         private readonly RenderMesh _meshPlaneLit;
+        // 地面纹理（lit 绘制用）+ 接触阴影贴片纹理（径向渐变 alpha）
+        private readonly IntPtr _texFloor;
+        private readonly IntPtr _texShadow;
+        // 阴影用普通 plane（5-float 顶点 + base pipeline 的 alpha blend），不能用 lit mesh
+        private readonly RenderMesh _meshShadowPlane;
         // 实体尺寸（对齐 C++ server.cpp/client.cpp 的 mesh 尺寸 = 碰撞体尺寸）
         private const float PlayerW = 0.6f, PlayerH = 1.2f, PlayerD = 0.6f;
         private const float EnemyW = 0.5f, EnemyH = 1.0f, EnemyD = 0.5f;
@@ -69,6 +74,17 @@ namespace JoyGame
             _meshSphereLit = R3dExt.MeshLitSphere(r, 0.5f, 12, 8);
             _meshPlaneLit = R3dExt.MeshLitPlane(r, 32f, 32f, 1);
 
+            // 光照：降低环境光让暗面真正暗，主光斜侧低位拉出明暗差，
+            // 加一盏冷色补光避免背面死黑。culture 感来自明暗对比，不是整体提亮。
+            R3dExtPlus.SetLightBlock(r, BuildLightBlock());
+
+            // 地砖纹理 + 接触阴影贴片
+            _texFloor = R3dExtPlus.CreateTexture(r, 128, 128, MakeFloorTexture(128), false);
+            _texShadow = R3dExtPlus.CreateTexture(r, 64, 64, MakeShadowTexture(64), false);
+            // 阴影贴片用水平 plane（1×1），靠 scale 拉成脚下椭圆。
+            // 走 base pipeline（alpha blend），lit pipeline 是 ONE/ZERO 不透明覆盖。
+            _meshShadowPlane = Bindings.R3dMeshPlane(r, 1f, 1f, 1);
+
             Bindings.R3dFontInit(r, "fonts/simhei.ttf", 24);
         }
 
@@ -83,6 +99,63 @@ namespace JoyGame
                 0f, 0f, sz, tz,
                 0f, 0f, 0f, 1f
             };
+        }
+
+        // 4 盏灯 × 16 float + ambient[4] + viewPos[4] = 72 float，
+        // 布局对齐 joy_r3d_light_block_t（jtypes.h:22-36）。
+        private static float[] BuildLightBlock()
+        {
+            float[] b = new float[72];
+            // 主光：斜侧高位方向光，暖白。方向由 position -> target 决定。
+            SetLight(b, 0, 0, 12f, 14f, 8f, 0f, 0f, 0f, 1.0f, 0.96f, 0.88f, 1f);
+            // 补光：反向冷色，强度低，避免背光面纯黑。
+            SetLight(b, 1, 0, -10f, 8f, -12f, 0f, 0f, 0f, 0.28f, 0.34f, 0.48f, 1f);
+            // 环境光降到 0.07（默认 0.15 太亮，暗面被抬平）。
+            b[64] = 0.07f; b[65] = 0.07f; b[66] = 0.08f; b[67] = 1f;
+            return b;
+        }
+
+        private static void SetLight(float[] b, int idx, int type,
+            float px, float py, float pz, float tx, float ty, float tz,
+            float cr, float cg, float cb, float ca)
+        {
+            int o = idx * 16;
+            b[o] = 1f; b[o + 1] = type;                 // enabled=1, type(0=方向光)
+            b[o + 4] = px; b[o + 5] = py; b[o + 6] = pz;
+            b[o + 8] = tx; b[o + 9] = ty; b[o + 10] = tz;
+            b[o + 12] = cr; b[o + 13] = cg; b[o + 14] = cb; b[o + 15] = ca;
+        }
+
+        // 地砖：128×128，每 32px 一格，浅灰底 + 深灰缝 + 轻微明暗扰动。
+        private static byte[] MakeFloorTexture(int n)
+        {
+            byte[] px = new byte[n * n * 4];
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++) {
+                int i = (y * n + x) * 4;
+                bool seam = (x % 32 < 2) || (y % 32 < 2);
+                int shade = seam ? 150 : (((x / 32 + y / 32) & 1) == 0 ? 214 : 202);
+                px[i] = px[i + 1] = px[i + 2] = (byte)shade;
+                px[i + 3] = 255;
+            }
+            return px;
+        }
+
+        // 接触阴影：64×64 径向渐变，中心不透明黑、边缘全透明。
+        private static byte[] MakeShadowTexture(int n)
+        {
+            byte[] px = new byte[n * n * 4];
+            float c = (n - 1) * 0.5f;
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++) {
+                int i = (y * n + x) * 4;
+                float dx = (x - c) / c, dy = (y - c) / c;
+                float d = dx * dx + dy * dy;
+                float a = d >= 1f ? 0f : (float)Math.Pow(1f - d, 1.6) * 0.55f;
+                px[i] = px[i + 1] = px[i + 2] = 0;
+                px[i + 3] = (byte)(a * 255f);
+            }
+            return px;
         }
 
         public void Snapshot(GameState state)
@@ -159,13 +232,22 @@ namespace JoyGame
                 0f, 1f, 0f, 60f);
         }
 
-        // ---- floor_pass：浅灰 lit 填充 + 网格线（下沉 0.05 防 z-fighting）----
+        // ---- floor_pass：地砖纹理 + 网格线（下沉 0.05 防 z-fighting）----
         private void FloorPass()
         {
-            R3dExt.DrawMeshLitColor(_r, _meshPlaneLit,
-                Trs(1f, 1f, 1f, 0f, -0.05f, 0f), 228, 228, 232, 255);
+            // 纹理用 lit 管线绘制，地面也受光照，与实体明暗一致
+            R3dExtPlus.DrawMeshLitTex(_r, _meshPlaneLit,
+                Trs(1f, 1f, 1f, 0f, -0.05f, 0f), _texFloor);
             R3dExt.DrawWireBasis(_r, _meshFloorWire,
                 Trs(1f, 1f, 1f, 0f, -0.05f, 0f), 205, 205, 212, 255);
+        }
+
+        // ---- 接触阴影：角色脚下软边椭圆，贴地（base pipeline alpha blend）----
+        private void DrawShadow(float x, float y, float z, float w, float d)
+        {
+            // y 与地板 (-0.05) 拉开一点，避免 z-fighting；阴影在实体绘制之前画。
+            R3dExtPlus.DrawMeshTex(_r, _meshShadowPlane,
+                x, -0.03f, z, w * 1.8f, 1f, d * 1.8f, _texShadow);
         }
 
         // ---- 静态障碍：灰蓝立方体（对齐 static_collider_pass 的盒体）----
@@ -186,6 +268,22 @@ namespace JoyGame
         // ---- 玩家/敌人：按角色/敌我着色，血条用细长 quad ----
         private void EntitiesPass(GameState state, float alpha)
         {
+            // 阴影先统一画完，再画实体：半透明贴片写深度，放后面会互相遮挡
+            for (int i = 0; i < GameConst.MaxPlayers; i++)
+            {
+                var p = state.Players[i];
+                if (!p.Alive) continue;
+                DrawShadow(Lerp(_prevPX[i], Fp.ToFloat(p.X), alpha), 0f,
+                    Lerp(_prevPZ[i], Fp.ToFloat(p.Z), alpha), PlayerW, PlayerD);
+            }
+            for (int i = 0; i < GameConst.MaxEnemies; i++)
+            {
+                var e = state.Enemies[i];
+                if (!e.Alive) continue;
+                DrawShadow(Lerp(_prevEX[i], Fp.ToFloat(e.X), alpha), 0f,
+                    Lerp(_prevEZ[i], Fp.ToFloat(e.Z), alpha), EnemyW, EnemyD);
+            }
+
             for (int i = 0; i < GameConst.MaxPlayers; i++)
             {
                 var p = state.Players[i];
